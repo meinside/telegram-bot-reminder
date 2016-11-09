@@ -1,0 +1,6 @@
+{
+	"telegram_api_token": "0123456789:abcdefghijklmnopqrstuvwxyz",
+	"monitor_interval_seconds": 60,
+	"telegram_interval_seconds": 10,
+	"max_num_tries": 3,
+}
