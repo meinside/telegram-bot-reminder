@@ -26,7 +26,7 @@ const (
 
 	MessageCancel                 = "취소"
 	MessageCommandCanceled        = "명령이 취소 되었습니다."
-	MessageReminderCanceledFormat = "알림 %d: 취소 되었습니다."
+	MessageReminderCanceledFormat = "알림(%d)이 취소 되었습니다."
 	MessageError                  = "오류가 발생했습니다."
 	MessageNoReminders            = "예약된 알림이 없습니다."
 	MessageNoDateTime             = "날짜 또는 시간이 없습니다."
@@ -167,15 +167,15 @@ func processQueue(client *bot.Bot) {
 
 func processUpdate(b *bot.Bot, update bot.Update, err error) {
 	if err == nil {
-		username := *update.Message.From.Username
-
-		if !isAllowedId(username) {
-			log.Printf("*** Id not allowed: %s\n", username)
-
-			return
-		}
-
 		if update.HasMessage() {
+			username := *update.Message.From.Username
+
+			if !isAllowedId(username) {
+				log.Printf("*** Id not allowed: %s\n", username)
+
+				return
+			}
+
 			chatId := update.Message.Chat.Id
 
 			// 'is typing...'
@@ -201,6 +201,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 							},
 						},
 					},
+					ResizeKeyboard: true,
 				},
 			}
 
@@ -213,7 +214,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 					reminders := db.UndeliveredQueueItems(chatId)
 					if len(reminders) > 0 {
 						for _, r := range reminders {
-							message += fmt.Sprintf("%d. \"%s\" @%s\n", r.Id, r.Message, r.FireOn.Format("2006.1.2 15:04"))
+							message += fmt.Sprintf("- %s @%s\n", r.Message, r.FireOn.Format("2006.1.2 15:04"))
 						}
 					} else {
 						message = MessageNoReminders
@@ -226,7 +227,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						for _, r := range reminders {
 							buttons = append(buttons, []bot.InlineKeyboardButton{
 								bot.InlineKeyboardButton{
-									Text:         fmt.Sprintf("%d. %s", r.Id, r.Message),
+									Text:         fmt.Sprintf("%s @%s", r.Message, r.FireOn.Format("2006.1.2 15:04")),
 									CallbackData: fmt.Sprintf("%s %d", CommandCancel, r.Id),
 								},
 							})
