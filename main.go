@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/meinside/lazy-korean-date-parser-go"
 	bot "github.com/meinside/telegram-bot-go"
 
-	"github.com/meinside/lazy-korean-date-parser-go"
 	"github.com/meinside/telegram-bot-reminder/helper"
 )
 
