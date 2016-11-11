@@ -1,0 +1,17 @@
+[Unit]
+Description=Telegram Reminder Bot
+After=syslog.target
+After=network.target
+
+[Service]
+Type=simple
+User=some_user
+Group=some_user
+WorkingDirectory=/path/to/telegram-bot-reminder
+ExecStart=/path/to/telegram-bot-reminder/telegram-bot-reminder
+Restart=always
+RestartSec=5
+Environment=
+
+[Install]
+WantedBy=multi-user.target
