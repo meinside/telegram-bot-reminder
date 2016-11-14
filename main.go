@@ -34,7 +34,7 @@ const (
 	MessageSaveFailedFormat       = "알림 저장을 실패 했습니다: %s"
 	MessageParseFailedFormat      = "메시지를 이해하지 못했습니다: %s"
 	MessageCancelWhat             = "어떤 알림을 취소하시겠습니까?"
-	MessageTimeIsPastFormat       = "2006-1-2 15:04는 이미 지난 시각입니다"
+	MessageTimeIsPastFormat       = "2006.1.2 15:04는 이미 지난 시각입니다"
 	MessageUsage                  = `사용법:
 
 * 기본 사용 방법:
@@ -224,7 +224,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 					reminders := db.UndeliveredQueueItems(chatId)
 					if len(reminders) > 0 {
 						for _, r := range reminders {
-							message += fmt.Sprintf("- %s @%s\n", r.Message, r.FireOn.Format("2006.1.2 15:04"))
+							message += fmt.Sprintf("> %s @%s\n", r.Message, r.FireOn.Format("2006.1.2 15:04"))
 						}
 					} else {
 						message = MessageNoReminders
@@ -262,7 +262,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						if db.Enqueue(chatId, update.Message.MessageId, txt, when) {
 							message = fmt.Sprintf(MessageResponseFormat,
 								username,
-								when.Format("2006년 1월 2일 15:04"),
+								when.Format("2006.1.2 15:04"),
 								what,
 							)
 						} else {
