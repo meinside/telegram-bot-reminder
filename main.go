@@ -34,6 +34,7 @@ const (
 	MessageSaveFailedFormat       = "알림 저장을 실패 했습니다: %s"
 	MessageParseFailedFormat      = "메시지를 이해하지 못했습니다: %s"
 	MessageCancelWhat             = "어떤 알림을 취소하시겠습니까?"
+	MessageTimeIsPastFormat       = "2006-1-2 15:04는 이미 지난 시각입니다"
 	MessageUsage                  = `사용법:
 
 * 기본 사용 방법:
@@ -132,6 +133,15 @@ func isAllowedId(id string) bool {
 	}
 
 	return false
+}
+
+func monitorQueue(monitor *time.Ticker, client *bot.Bot) {
+	for {
+		select {
+		case <-monitor.C:
+			processQueue(client)
+		}
+	}
 }
 
 func processQueue(client *bot.Bot) {
@@ -337,6 +347,8 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 }
 
 func parseMessage(message string) (when time.Time, what string, err error) {
+	now := time.Now()
+
 	what = fmt.Sprintf("%s", message) // XXX - edit this?
 
 	var hour, minute int
@@ -347,28 +359,26 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 		when = when.Add(time.Duration(hour) * time.Hour).Add(time.Duration(minute) * time.Minute)
 	} else {
 		if hour, minute, _, err = lkdp.ExtractTime(message, false); err == nil {
-			now := time.Now()
 			when = time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, _location)
 		} else {
 			return time.Time{}, "", fmt.Errorf(MessageNoDateTime)
 		}
 	}
 
-	return when, what, nil
+	if when.Unix() >= now.Unix() {
+		return when, what, nil
+	} else {
+		return time.Time{}, "", fmt.Errorf(when.Format(MessageTimeIsPastFormat))
+	}
 }
 
 func main() {
 	// monitor queue
-	monitor := time.NewTicker(time.Duration(_monitorIntervalSeconds) * time.Second)
 	log.Printf("Starting monitoring queue...\n")
-	go func(client *bot.Bot) {
-		for {
-			select {
-			case <-monitor.C:
-				processQueue(client)
-			}
-		}
-	}(telegram)
+	go monitorQueue(
+		time.NewTicker(time.Duration(_monitorIntervalSeconds)*time.Second),
+		telegram,
+	)
 
 	// get info about this bot
 	if me := telegram.GetMe(); me.Ok {
