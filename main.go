@@ -113,10 +113,11 @@ func init() {
 		_allowedUserIds = _conf.AllowedUserIds
 
 		telegram = bot.NewClient(_conf.TelegramApiToken)
-		db = helper.OpenDb(DbFilename)
-		_location, _ = time.LoadLocation("Local")
-
 		telegram.Verbose = _conf.IsVerbose
+
+		db = helper.OpenDb(DbFilename)
+
+		_location, _ = time.LoadLocation("Local")
 		_isVerbose = _conf.IsVerbose
 	}
 }
@@ -225,7 +226,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 					reminders := db.UndeliveredQueueItems(chatId)
 					if len(reminders) > 0 {
 						for _, r := range reminders {
-							message += fmt.Sprintf("> %s @%s\n", r.Message, r.FireOn.Format("2006.1.2 15:04"))
+							message += fmt.Sprintf("➤ %s @%s\n", r.Message, r.FireOn.Format("2006.1.2 15:04"))
 						}
 					} else {
 						message = MessageNoReminders
@@ -298,7 +299,7 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 	query := *update.CallbackQuery
 	txt := *query.Data
 
-	var message string
+	var message string = MessageError
 	if strings.HasPrefix(txt, CommandCancel) {
 		if txt == CommandCancel {
 			message = MessageCommandCanceled
@@ -309,19 +310,13 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 					message = fmt.Sprintf(MessageReminderCanceledFormat, queueId)
 				} else {
 					log.Printf("*** Failed to delete reminder\n")
-
-					message = MessageError
 				}
 			} else {
 				log.Printf("*** Unprocessable callback query: %s\n", txt)
-
-				message = MessageError
 			}
 		}
 	} else {
 		log.Printf("*** Unprocessable callback query: %s\n", txt)
-
-		message = MessageError
 	}
 
 	// answer callback query
@@ -375,7 +370,7 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 
 func main() {
 	// monitor queue
-	log.Printf("Starting monitoring queue...\n")
+	log.Printf("> Starting monitoring queue...\n")
 	go monitorQueue(
 		time.NewTicker(time.Duration(_monitorIntervalSeconds)*time.Second),
 		telegram,
@@ -383,7 +378,7 @@ func main() {
 
 	// get info about this bot
 	if me := telegram.GetMe(); me.Ok {
-		log.Printf("Starting bot: @%s (%s)\n", *me.Result.Username, *me.Result.FirstName)
+		log.Printf("> Starting bot: @%s (%s)\n", *me.Result.Username, *me.Result.FirstName)
 
 		// delete webhook (getting updates will not work when wehbook is set up)
 		if unhooked := telegram.DeleteWebhook(); unhooked.Ok {
