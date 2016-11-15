@@ -26,7 +26,7 @@ const (
 
 	MessageCancel                 = "취소"
 	MessageCommandCanceled        = "명령이 취소 되었습니다."
-	MessageReminderCanceledFormat = "알림(%d)이 취소 되었습니다."
+	MessageReminderCanceledFormat = "알림(id: %d)이 취소 되었습니다."
 	MessageError                  = "오류가 발생했습니다."
 	MessageNoReminders            = "예약된 알림이 없습니다."
 	MessageNoDateTime             = "날짜 또는 시간이 없습니다."
