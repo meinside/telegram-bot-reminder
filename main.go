@@ -35,6 +35,7 @@ const (
 	MessageParseFailedFormat      = "메시지를 이해하지 못했습니다: %s"
 	MessageCancelWhat             = "어떤 알림을 취소하시겠습니까?"
 	MessageTimeIsPastFormat       = "2006.1.2 15:04는 이미 지난 시각입니다"
+	MessageSendingBackFile        = "받은 파일을 다시 보내드립니다."
 	MessageUsage                  = `사용법:
 
 * 기본 사용 방법:
@@ -217,7 +218,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				},
 			}
 
-			if update.Message.HasText() {
+			if update.Message.HasText() { // text
 				txt := *update.Message.Text
 
 				if strings.HasPrefix(txt, CommandStart) { // /start
@@ -274,6 +275,68 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						message = fmt.Sprintf(MessageParseFailedFormat, err)
 					}
 				}
+			} else if update.Message.HasDocument() { // file
+				fileId := update.Message.Document.FileId
+
+				// send received file back
+				options["caption"] = MessageSendingBackFile
+				if sent := b.SendDocumentWithFileId(chatId, fileId, options); !sent.Ok {
+					log.Printf("*** failed to send document back: %s\n", *sent.Description)
+				}
+
+				return
+			} else if update.Message.HasAudio() { // audio
+				fileId := update.Message.Audio.FileId
+
+				// send received file back
+				options["caption"] = MessageSendingBackFile
+				if sent := b.SendAudioWithFileId(chatId, fileId, options); !sent.Ok {
+					log.Printf("*** failed to send audio back: %s\n", *sent.Description)
+				}
+
+				return
+			} else if update.Message.HasPhoto() { // photo
+				options["caption"] = MessageSendingBackFile
+
+				for _, photo := range update.Message.Photo {
+					fileId := photo.FileId
+
+					// send received file back
+					if sent := b.SendPhotoWithFileId(chatId, fileId, options); !sent.Ok {
+						log.Printf("*** failed to send photo back: %s\n", *sent.Description)
+					}
+				}
+
+				return
+			} else if update.Message.HasSticker() { // sticker
+				fileId := update.Message.Sticker.FileId
+
+				// send received file back
+				if sent := b.SendStickerWithFileId(chatId, fileId, options); !sent.Ok {
+					log.Printf("*** failed to send sticker back: %s\n", *sent.Description)
+				}
+
+				return
+			} else if update.Message.HasVideo() { // video
+				fileId := update.Message.Video.FileId
+
+				// send received file back
+				options["caption"] = MessageSendingBackFile
+				if sent := b.SendVideoWithFileId(chatId, fileId, options); !sent.Ok {
+					log.Printf("*** failed to send video back: %s\n", *sent.Description)
+				}
+
+				return
+			} else if update.Message.HasVoice() { // voice
+				fileId := update.Message.Voice.FileId
+
+				// send received file back
+				options["caption"] = MessageSendingBackFile
+				if sent := b.SendVoiceWithFileId(chatId, fileId, options); !sent.Ok {
+					log.Printf("*** failed to send voice back: %s\n", *sent.Description)
+				}
+
+				return
 			}
 
 			// send message
