@@ -42,16 +42,24 @@ const (
 날짜 또는 시간이 포함된 메시지를 보내면,
 인식한 해당 날짜/시간에 메시지를 다시 보내줍니다.
 
-* 예:
+* 사용 예:
 "내일 이 메시지 다시 보내줄래?"
 "18:30 알림"
 "2016-12-31 오후 11시에 신년 타종행사 보라고 알려다오"
 "1시간 뒤 가스 불 끄기"
+"28일 후엔 좀비들이 다 굶어 죽었다더라"
 
 * 기타 명령어:
 /list : 예약된 알림 조회
 /cancel : 예약된 알림 취소
 /help : 본 사용법 확인
+
+* 사용 라이브러리:
+https://github.com/meinside/telegram-bot-go
+https://github.com/meinside/lazy-korean-date-parser-go
+
+* 문의:
+https://github.com/meinside/telegram-bot-reminder
 `
 )
 
