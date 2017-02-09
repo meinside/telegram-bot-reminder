@@ -54,10 +54,6 @@ const (
 /cancel : 예약된 알림 취소
 /help : 본 사용법 확인
 
-* 사용 라이브러리:
-https://github.com/meinside/telegram-bot-go
-https://github.com/meinside/lazy-korean-date-parser-go
-
 * 문의:
 https://github.com/meinside/telegram-bot-reminder
 `
