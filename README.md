@@ -10,6 +10,7 @@
 
 ```bash
 $ git clone https://github.com/meinside/telegram-bot-reminder.git
+$ cd telegram-bot-reminder
 ```
 
 ## build
