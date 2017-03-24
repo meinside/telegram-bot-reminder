@@ -9,8 +9,8 @@
 ## install
 
 ```bash
-$ git clone https://github.com/meinside/telegram-bot-reminder.git
-$ cd telegram-bot-reminder
+$ go get -d github.com/meinside/telegram-bot-reminder
+$ cd $GOPATH/src/github.com/meinside/telegram-bot-reminder
 ```
 
 ## build
