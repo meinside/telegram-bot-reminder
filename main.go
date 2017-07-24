@@ -155,7 +155,7 @@ func processQueue(client *bot.Bot) {
 	queue := db.DeliverableQueueItems(_maxNumTries)
 
 	if _isVerbose {
-		log.Printf("Checking queue: %d items...\n", len(queue))
+		log.Printf("Checking queue: %d items...", len(queue))
 	}
 
 	for _, q := range queue {
@@ -165,18 +165,18 @@ func processQueue(client *bot.Bot) {
 			options := map[string]interface{}{
 				"reply_to_message_id": q.MessageId, // show original message
 			}
-			if sent := client.SendMessage(q.ChatId, &message, options); !sent.Ok {
-				log.Printf("*** failed to send reminder: %s\n", *sent.Description)
+			if sent := client.SendMessage(q.ChatId, message, options); !sent.Ok {
+				log.Printf("*** failed to send reminder: %s", *sent.Description)
 			} else {
 				// mark as delivered
 				if !db.MarkQueueItemAsDelivered(q.ChatId, q.Id) {
-					log.Printf("*** failed to mark chat id: %d, queue id: %d\n", q.ChatId, q.Id)
+					log.Printf("*** failed to mark chat id: %d, queue id: %d", q.ChatId, q.Id)
 				}
 			}
 
 			// increase num tries
 			if !db.IncreaseNumTries(q.ChatId, q.Id) {
-				log.Printf("*** failed to increase num tries for chat id: %d, queue id: %d\n", q.ChatId, q.Id)
+				log.Printf("*** failed to increase num tries for chat id: %d, queue id: %d", q.ChatId, q.Id)
 			}
 		}(q)
 	}
@@ -188,7 +188,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 			username := *update.Message.From.Username
 
 			if !isAllowedId(username) {
-				log.Printf("*** Id not allowed: %s\n", username)
+				log.Printf("*** Id not allowed: %s", username)
 
 				return
 			}
@@ -239,25 +239,27 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				} else if strings.HasPrefix(txt, CommandCancel) {
 					reminders := db.UndeliveredQueueItems(chatId)
 					if len(reminders) > 0 {
-						// inline keyboards for canceling reminder
-						buttons := [][]bot.InlineKeyboardButton{}
+						// inline keyboards
+						keys := make(map[string]string)
 						for _, r := range reminders {
-							buttons = append(buttons, []bot.InlineKeyboardButton{
-								bot.InlineKeyboardButton{
-									Text:         fmt.Sprintf("%s @%s", r.Message, r.FireOn.Format("2006.1.2 15:04")),
-									CallbackData: fmt.Sprintf("%s %d", CommandCancel, r.Id),
-								},
-							})
+							keys[fmt.Sprintf("%s @%s", r.Message, r.FireOn.Format("2006.1.2 15:04"))] = fmt.Sprintf("%s %d", CommandCancel, r.Id)
 						}
+						buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
+
+						// add a cancel button for canceling reminder
+						cancel := CommandCancel
 						buttons = append(buttons, []bot.InlineKeyboardButton{
 							bot.InlineKeyboardButton{
 								Text:         MessageCancel,
-								CallbackData: CommandCancel,
+								CallbackData: &cancel,
 							},
 						})
+
+						// options
 						options["reply_markup"] = bot.InlineKeyboardMarkup{
 							InlineKeyboard: buttons,
 						}
+
 						message = MessageCancelWhat
 					} else {
 						message = MessageNoReminders
@@ -285,7 +287,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				// send received file back
 				options["caption"] = MessageSendingBackFile
 				if sent := b.SendDocumentWithFileId(chatId, fileId, options); !sent.Ok {
-					log.Printf("*** failed to send document back: %s\n", *sent.Description)
+					log.Printf("*** failed to send document back: %s", *sent.Description)
 				}
 
 				return
@@ -295,7 +297,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				// send received file back
 				options["caption"] = MessageSendingBackFile
 				if sent := b.SendAudioWithFileId(chatId, fileId, options); !sent.Ok {
-					log.Printf("*** failed to send audio back: %s\n", *sent.Description)
+					log.Printf("*** failed to send audio back: %s", *sent.Description)
 				}
 
 				return
@@ -307,7 +309,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 
 					// send received file back
 					if sent := b.SendPhotoWithFileId(chatId, fileId, options); !sent.Ok {
-						log.Printf("*** failed to send photo back: %s\n", *sent.Description)
+						log.Printf("*** failed to send photo back: %s", *sent.Description)
 					}
 				}
 
@@ -317,7 +319,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 
 				// send received file back
 				if sent := b.SendStickerWithFileId(chatId, fileId, options); !sent.Ok {
-					log.Printf("*** failed to send sticker back: %s\n", *sent.Description)
+					log.Printf("*** failed to send sticker back: %s", *sent.Description)
 				}
 
 				return
@@ -327,7 +329,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				// send received file back
 				options["caption"] = MessageSendingBackFile
 				if sent := b.SendVideoWithFileId(chatId, fileId, options); !sent.Ok {
-					log.Printf("*** failed to send video back: %s\n", *sent.Description)
+					log.Printf("*** failed to send video back: %s", *sent.Description)
 				}
 
 				return
@@ -337,7 +339,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				// send received file back
 				options["caption"] = MessageSendingBackFile
 				if sent := b.SendVoiceWithFileId(chatId, fileId, options); !sent.Ok {
-					log.Printf("*** failed to send voice back: %s\n", *sent.Description)
+					log.Printf("*** failed to send voice back: %s", *sent.Description)
 				}
 
 				return
@@ -347,14 +349,14 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 			if len(message) <= 0 {
 				message = MessageError
 			}
-			if sent := b.SendMessage(chatId, &message, options); !sent.Ok {
-				log.Printf("*** failed to send message: %s\n", *sent.Description)
+			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+				log.Printf("*** failed to send message: %s", *sent.Description)
 			}
 		} else if update.HasCallbackQuery() {
 			processCallbackQuery(b, update)
 		}
 	} else {
-		log.Printf("*** error while receiving update (%s)\n", err.Error())
+		log.Printf("*** error while receiving update (%s)", err.Error())
 	}
 }
 
@@ -376,14 +378,14 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 				if db.DeleteQueueItem(query.Message.Chat.Id, int64(queueId)) {
 					message = fmt.Sprintf(MessageReminderCanceledFormat, queueId)
 				} else {
-					log.Printf("*** Failed to delete reminder\n")
+					log.Printf("*** Failed to delete reminder")
 				}
 			} else {
-				log.Printf("*** Unprocessable callback query: %s\n", txt)
+				log.Printf("*** Unprocessable callback query: %s", txt)
 			}
 		}
 	} else {
-		log.Printf("*** Unprocessable callback query: %s\n", txt)
+		log.Printf("*** Unprocessable callback query: %s", txt)
 	}
 
 	// answer callback query
@@ -393,15 +395,15 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 			"chat_id":    query.Message.Chat.Id,
 			"message_id": query.Message.MessageId,
 		}
-		if apiResult := b.EditMessageText(&message, options); apiResult.Ok {
+		if apiResult := b.EditMessageText(message, options); apiResult.Ok {
 			result = true
 		} else {
-			log.Printf("*** Failed to edit message text: %s\n", *apiResult.Description)
+			log.Printf("*** Failed to edit message text: %s", *apiResult.Description)
 
 			db.LogError(fmt.Sprintf("failed to edit message text: %s", *apiResult.Description))
 		}
 	} else {
-		log.Printf("*** Failed to answer callback query: %+v\n", query)
+		log.Printf("*** Failed to answer callback query: %+v", query)
 
 		db.LogError(fmt.Sprintf("failed to answer callback query: %+v", query))
 	}
@@ -437,7 +439,7 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 
 func main() {
 	// monitor queue
-	log.Printf("> Starting monitoring queue...\n")
+	log.Printf("> Starting monitoring queue...")
 	go monitorQueue(
 		time.NewTicker(time.Duration(_monitorIntervalSeconds)*time.Second),
 		telegram,
@@ -445,7 +447,7 @@ func main() {
 
 	// get info about this bot
 	if me := telegram.GetMe(); me.Ok {
-		log.Printf("> Starting bot: @%s (%s)\n", *me.Result.Username, *me.Result.FirstName)
+		log.Printf("> Starting bot: @%s (%s)", *me.Result.Username, me.Result.FirstName)
 
 		// delete webhook (getting updates will not work when wehbook is set up)
 		if unhooked := telegram.DeleteWebhook(); unhooked.Ok {
