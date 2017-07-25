@@ -286,7 +286,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 
 				// send received file back
 				options["caption"] = MessageSendingBackFile
-				if sent := b.SendDocumentWithFileId(chatId, fileId, options); !sent.Ok {
+				if sent := b.SendDocument(chatId, fileId, options); !sent.Ok {
 					log.Printf("*** failed to send document back: %s", *sent.Description)
 				}
 
@@ -296,7 +296,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 
 				// send received file back
 				options["caption"] = MessageSendingBackFile
-				if sent := b.SendAudioWithFileId(chatId, fileId, options); !sent.Ok {
+				if sent := b.SendAudio(chatId, fileId, options); !sent.Ok {
 					log.Printf("*** failed to send audio back: %s", *sent.Description)
 				}
 
@@ -308,7 +308,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 					fileId := photo.FileId
 
 					// send received file back
-					if sent := b.SendPhotoWithFileId(chatId, fileId, options); !sent.Ok {
+					if sent := b.SendPhoto(chatId, fileId, options); !sent.Ok {
 						log.Printf("*** failed to send photo back: %s", *sent.Description)
 					}
 				}
@@ -318,7 +318,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				fileId := update.Message.Sticker.FileId
 
 				// send received file back
-				if sent := b.SendStickerWithFileId(chatId, fileId, options); !sent.Ok {
+				if sent := b.SendSticker(chatId, fileId, options); !sent.Ok {
 					log.Printf("*** failed to send sticker back: %s", *sent.Description)
 				}
 
@@ -328,7 +328,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 
 				// send received file back
 				options["caption"] = MessageSendingBackFile
-				if sent := b.SendVideoWithFileId(chatId, fileId, options); !sent.Ok {
+				if sent := b.SendVideo(chatId, fileId, options); !sent.Ok {
 					log.Printf("*** failed to send video back: %s", *sent.Description)
 				}
 
@@ -338,7 +338,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 
 				// send received file back
 				options["caption"] = MessageSendingBackFile
-				if sent := b.SendVoiceWithFileId(chatId, fileId, options); !sent.Ok {
+				if sent := b.SendVoice(chatId, fileId, options); !sent.Ok {
 					log.Printf("*** failed to send voice back: %s", *sent.Description)
 				}
 
