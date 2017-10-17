@@ -26,7 +26,7 @@ const (
 
 	MessageCancel                 = "취소"
 	MessageCommandCanceled        = "명령이 취소 되었습니다."
-	MessageReminderCanceledFormat = "알림(id: %d)이 취소 되었습니다."
+	MessageReminderCanceledFormat = "알림이 취소 되었습니다: %s"
 	MessageError                  = "오류가 발생했습니다."
 	MessageNoReminders            = "예약된 알림이 없습니다."
 	MessageNoDateTime             = "날짜 또는 시간이 없습니다."
@@ -375,10 +375,14 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 		} else {
 			cancelParam := strings.TrimSpace(strings.Replace(txt, CommandCancel, "", 1))
 			if queueId, err := strconv.Atoi(cancelParam); err == nil {
-				if db.DeleteQueueItem(query.Message.Chat.Id, int64(queueId)) {
-					message = fmt.Sprintf(MessageReminderCanceledFormat, queueId)
+				if item, err := db.GetQueueItem(query.Message.Chat.Id, int64(queueId)); err == nil {
+					if db.DeleteQueueItem(query.Message.Chat.Id, int64(queueId)) {
+						message = fmt.Sprintf(MessageReminderCanceledFormat, item.Message)
+					} else {
+						log.Printf("*** Failed to delete reminder")
+					}
 				} else {
-					log.Printf("*** Failed to delete reminder")
+					log.Printf("*** Failed to get reminder: %s", err)
 				}
 			} else {
 				log.Printf("*** Unprocessable callback query: %s", txt)

@@ -2,6 +2,7 @@ package helper
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -111,11 +112,11 @@ func (d *Database) saveLog(typ, msg string) {
 	d.Lock()
 
 	if stmt, err := d.db.Prepare(`insert into logs(type, message) values(?, ?)`); err != nil {
-		log.Printf("*** Failed to prepare a statement: %s\n", err.Error())
+		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
 		if _, err = stmt.Exec(typ, msg); err != nil {
-			log.Printf("*** Failed to save log into local database: %s\n", err.Error())
+			log.Printf("*** Failed to save log into local database: %s", err.Error())
 		}
 	}
 
@@ -136,12 +137,12 @@ func (d *Database) GetLogs(latestN int) []Log {
 	d.RLock()
 
 	if stmt, err := d.db.Prepare(`select type, message, time from logs order by id desc limit ?`); err != nil {
-		log.Printf("*** Failed to prepare a statement: %s\n", err.Error())
+		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
 
 		if rows, err := stmt.Query(latestN); err != nil {
-			log.Printf("*** Failed to select logs from local database: %s\n", err.Error())
+			log.Printf("*** Failed to select logs from local database: %s", err.Error())
 		} else {
 			defer rows.Close()
 
@@ -170,12 +171,12 @@ func (d *Database) Enqueue(chatId int64, messageId int, message string, fireOn t
 	d.Lock()
 
 	if stmt, err := d.db.Prepare(`insert or ignore into queue(chat_id, message_id, message, fire_on) values(?, ?, ?, ?)`); err != nil {
-		log.Printf("*** Failed to prepare a statement: %s\n", err.Error())
+		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
 
 		if _, err = stmt.Exec(chatId, messageId, message, fireOn.Unix()); err != nil {
-			log.Printf("*** Failed to save queue item into local database: %s\n", err.Error())
+			log.Printf("*** Failed to save queue item into local database: %s", err.Error())
 		} else {
 			result = true
 		}
@@ -205,12 +206,12 @@ func (d *Database) DeliverableQueueItems(maxNumTries int) []QueueItem {
 		from queue
 		where delivered_on is null and num_tries < ? and fire_on <= ?
 		order by enqueued_on desc`); err != nil {
-		log.Printf("*** Failed to prepare a statement: %s\n", err.Error())
+		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
 
 		if rows, err := stmt.Query(maxNumTries, time.Now().Unix()); err != nil {
-			log.Printf("*** Failed to select queue items from local database: %s\n", err.Error())
+			log.Printf("*** Failed to select queue items from local database: %s", err.Error())
 		} else {
 			defer rows.Close()
 
@@ -255,12 +256,12 @@ func (d *Database) UndeliveredQueueItems(chatId int64) []QueueItem {
 		from queue
 		where chat_id = ? and delivered_on is null
 		order by enqueued_on desc`); err != nil {
-		log.Printf("*** Failed to prepare a statement: %s\n", err.Error())
+		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
 
 		if rows, err := stmt.Query(chatId); err != nil {
-			log.Printf("*** Failed to select queue items from local database: %s\n", err.Error())
+			log.Printf("*** Failed to select queue items from local database: %s", err.Error())
 		} else {
 			defer rows.Close()
 
@@ -289,17 +290,71 @@ func (d *Database) UndeliveredQueueItems(chatId int64) []QueueItem {
 	return queue
 }
 
+func (d *Database) GetQueueItem(chatId, queueId int64) (QueueItem, error) {
+	d.RLock()
+	defer d.RUnlock()
+
+	var stmt *sql.Stmt
+	var err error = nil
+
+	if stmt, err = d.db.Prepare(`select 
+		id,
+		chat_id, 
+		message_id,
+		message, 
+		enqueued_on,
+		fire_on,
+		delivered_on
+		from queue
+		where id = ? and chat_id = ?`); err != nil {
+		log.Printf("*** Failed to prepare a statement: %s", err.Error())
+	} else {
+		defer stmt.Close()
+
+		var rows *sql.Rows
+		if rows, err = stmt.Query(queueId, chatId); err != nil {
+			log.Printf("*** Failed to select a queue item from local database: %s", err.Error())
+		} else {
+			defer rows.Close()
+
+			var id, chatId int64
+			var messageId int
+			var message string
+			var enqueuedOn, fireOn, deliveredOn int64
+			if rows.Next() {
+				rows.Scan(&id, &chatId, &messageId, &message, &enqueuedOn, &fireOn, &deliveredOn)
+
+				return QueueItem{
+					Id:          id,
+					ChatId:      chatId,
+					MessageId:   messageId,
+					Message:     message,
+					EnqueuedOn:  time.Unix(enqueuedOn, 0),
+					FireOn:      time.Unix(fireOn, 0),
+					DeliveredOn: time.Unix(deliveredOn, 0),
+				}, nil
+			} else {
+				log.Printf("*** Failed to select a queue item with id = %d, chat_id = %d from local database", id, chatId)
+
+				err = fmt.Errorf("no such queue item with id = %d, chat_id = %d", id, chatId)
+			}
+		}
+	}
+
+	return QueueItem{}, err
+}
+
 func (d *Database) DeleteQueueItem(chatId, queueId int64) bool {
 	result := false
 
 	d.Lock()
 
 	if stmt, err := d.db.Prepare(`delete from queue where id = ? and chat_id = ?`); err != nil {
-		log.Printf("*** Failed to prepare a statement: %s\n", err.Error())
+		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
 		if _, err = stmt.Exec(queueId, chatId); err != nil {
-			log.Printf("*** Failed to delete queue item from local database: %s\n", err.Error())
+			log.Printf("*** Failed to delete queue item from local database: %s", err.Error())
 		} else {
 			result = true
 		}
@@ -316,16 +371,16 @@ func (d *Database) IncreaseNumTries(chatId, queueId int64) bool {
 	d.Lock()
 
 	if stmt, err := d.db.Prepare(`update queue set num_tries = num_tries + 1 where id = ? and chat_id = ?`); err != nil {
-		log.Printf("*** Failed to prepare a statement: %s\n", err.Error())
+		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
 
 		var res sql.Result
 		if res, err = stmt.Exec(queueId, chatId); err != nil {
-			log.Printf("*** Failed to increase num_tries in local database: %s\n", err.Error())
+			log.Printf("*** Failed to increase num_tries in local database: %s", err.Error())
 		} else {
 			if num, _ := res.RowsAffected(); num <= 0 {
-				log.Printf("*** Failed to increase num_tires for id: %d, chat_id: %d\n", queueId, chatId)
+				log.Printf("*** Failed to increase num_tires for id: %d, chat_id: %d", queueId, chatId)
 			} else {
 				result = true
 			}
@@ -343,7 +398,7 @@ func (d *Database) MarkQueueItemAsDelivered(chatId, queueId int64) bool {
 	d.Lock()
 
 	if stmt, err := d.db.Prepare(`update queue set delivered_on = ? where id = ? and chat_id = ?`); err != nil {
-		log.Printf("*** Failed to prepare a statement: %s\n", err.Error())
+		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
 
@@ -351,10 +406,10 @@ func (d *Database) MarkQueueItemAsDelivered(chatId, queueId int64) bool {
 
 		var res sql.Result
 		if res, err = stmt.Exec(now.Unix(), queueId, chatId); err != nil {
-			log.Printf("*** Failed to mark delivered_on in local database: %s\n", err.Error())
+			log.Printf("*** Failed to mark delivered_on in local database: %s", err.Error())
 		} else {
 			if num, _ := res.RowsAffected(); num <= 0 {
-				log.Printf("*** Failed to mark delivered_on for id: %d, chat_id: %d\n", queueId, chatId)
+				log.Printf("*** Failed to mark delivered_on for id: %d, chat_id: %d", queueId, chatId)
 			} else {
 				result = true
 			}
