@@ -231,7 +231,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 					reminders := db.UndeliveredQueueItems(chatId)
 					if len(reminders) > 0 {
 						for _, r := range reminders {
-							message += fmt.Sprintf("➤ %s @%s\n", r.Message, r.FireOn.Format("2006.1.2 15:04"))
+							message += fmt.Sprintf("☑ %s @%s\n", r.Message, r.FireOn.Format("2006.1.2 15:04"))
 						}
 					} else {
 						message = MessageNoReminders
