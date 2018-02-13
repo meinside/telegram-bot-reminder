@@ -45,6 +45,7 @@ const (
 * 사용 예:
 "내일 이 메시지 다시 보내줄래?"
 "18:30 알림"
+"7시 반 출근"
 "2016-12-31 오후 11시에 신년 타종행사 보라고 알려다오"
 "1시간 뒤 가스 불 끄기"
 "28일 후엔 좀비들이 다 굶어 죽었다더라"
@@ -202,21 +203,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 			options := map[string]interface{}{
 				"reply_markup": bot.ReplyKeyboardMarkup{ // show keyboards
 					Keyboard: [][]bot.KeyboardButton{
-						[]bot.KeyboardButton{
-							bot.KeyboardButton{
-								Text: CommandListReminders,
-							},
-						},
-						[]bot.KeyboardButton{
-							bot.KeyboardButton{
-								Text: CommandCancel,
-							},
-						},
-						[]bot.KeyboardButton{
-							bot.KeyboardButton{
-								Text: CommandHelp,
-							},
-						},
+						bot.NewKeyboardButtons(CommandListReminders, CommandCancel, CommandHelp),
 					},
 					ResizeKeyboard: true,
 				},
