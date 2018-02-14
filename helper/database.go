@@ -30,11 +30,24 @@ type QueueItem struct {
 	ChatId      int64     `json:"chat_id"`
 	MessageId   int       `json:"message_id"`
 	Message     string    `json:"message"`
+	FileId      string    `json:"file_id,omitempty"`
+	FileType    FileType  `json:"file_type,omitempty"`
 	EnqueuedOn  time.Time `json:"enqueued_on"`
 	FireOn      time.Time `json:"fire_on"`
 	DeliveredOn time.Time `json:"delivered_on,omitempty"`
 	NumTries    int       `json:"num_tries"`
 }
+
+type FileType string
+
+const (
+	FileTypeDocument FileType = "document"
+	FileTypeAudio    FileType = "audio"
+	FileTypePhoto    FileType = "photo"
+	FileTypeSticker  FileType = "sticker"
+	FileTypeVideo    FileType = "video"
+	FileTypeVoice    FileType = "voice"
+)
 
 var _db *Database = nil
 
@@ -63,6 +76,8 @@ func OpenDb(filepath string) *Database {
 				chat_id integer not null,
 				message_id integer not null,
 				message text not null,
+				file_id text default '',
+				file_type text default '',
 				enqueued_on integer default (strftime('%s', 'now')),
 				fire_on integer not null,
 				delivered_on integer default null,
@@ -165,17 +180,17 @@ func (d *Database) GetLogs(latestN int) []Log {
 	return logs
 }
 
-func (d *Database) Enqueue(chatId int64, messageId int, message string, fireOn time.Time) bool {
+func (d *Database) Enqueue(chatId int64, messageId int, message, fileId string, fileType FileType, fireOn time.Time) bool {
 	result := false
 
 	d.Lock()
 
-	if stmt, err := d.db.Prepare(`insert or ignore into queue(chat_id, message_id, message, fire_on) values(?, ?, ?, ?)`); err != nil {
+	if stmt, err := d.db.Prepare(`insert or ignore into queue(chat_id, message_id, message, file_id, file_type, fire_on) values(?, ?, ?, ?, ?, ?)`); err != nil {
 		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
 
-		if _, err = stmt.Exec(chatId, messageId, message, fireOn.Unix()); err != nil {
+		if _, err = stmt.Exec(chatId, messageId, message, fileId, fileType, fireOn.Unix()); err != nil {
 			log.Printf("*** Failed to save queue item into local database: %s", err.Error())
 		} else {
 			result = true
@@ -200,6 +215,8 @@ func (d *Database) DeliverableQueueItems(maxNumTries int) []QueueItem {
 		chat_id, 
 		message_id,
 		message, 
+		file_id,
+		file_type,
 		enqueued_on,
 		fire_on,
 		ifnull(delivered_on, 0) as delivered_on
@@ -217,16 +234,19 @@ func (d *Database) DeliverableQueueItems(maxNumTries int) []QueueItem {
 
 			var id, chatId int64
 			var messageId int
-			var message string
+			var message, fileId string
+			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
 			for rows.Next() {
-				rows.Scan(&id, &chatId, &messageId, &message, &enqueuedOn, &fireOn, &deliveredOn)
+				rows.Scan(&id, &chatId, &messageId, &message, &fileId, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
 
 				queue = append(queue, QueueItem{
 					Id:          id,
 					ChatId:      chatId,
 					MessageId:   messageId,
 					Message:     message,
+					FileId:      fileId,
+					FileType:    fileType,
 					EnqueuedOn:  time.Unix(enqueuedOn, 0),
 					FireOn:      time.Unix(fireOn, 0),
 					DeliveredOn: time.Unix(deliveredOn, 0),
@@ -250,6 +270,8 @@ func (d *Database) UndeliveredQueueItems(chatId int64) []QueueItem {
 		chat_id, 
 		message_id,
 		message, 
+		file_id,
+		file_type,
 		enqueued_on,
 		fire_on,
 		ifnull(delivered_on, 0) as delivered_on
@@ -267,16 +289,19 @@ func (d *Database) UndeliveredQueueItems(chatId int64) []QueueItem {
 
 			var id, chatId int64
 			var messageId int
-			var message string
+			var message, fileId string
+			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
 			for rows.Next() {
-				rows.Scan(&id, &chatId, &messageId, &message, &enqueuedOn, &fireOn, &deliveredOn)
+				rows.Scan(&id, &chatId, &messageId, &message, &fileId, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
 
 				queue = append(queue, QueueItem{
 					Id:          id,
 					ChatId:      chatId,
 					MessageId:   messageId,
 					Message:     message,
+					FileId:      fileId,
+					FileType:    fileType,
 					EnqueuedOn:  time.Unix(enqueuedOn, 0),
 					FireOn:      time.Unix(fireOn, 0),
 					DeliveredOn: time.Unix(deliveredOn, 0),
@@ -302,6 +327,8 @@ func (d *Database) GetQueueItem(chatId, queueId int64) (QueueItem, error) {
 		chat_id, 
 		message_id,
 		message, 
+		file_id,
+		file_type,
 		enqueued_on,
 		fire_on,
 		delivered_on
@@ -319,16 +346,19 @@ func (d *Database) GetQueueItem(chatId, queueId int64) (QueueItem, error) {
 
 			var id, chatId int64
 			var messageId int
-			var message string
+			var message, fileId string
+			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
 			if rows.Next() {
-				rows.Scan(&id, &chatId, &messageId, &message, &enqueuedOn, &fireOn, &deliveredOn)
+				rows.Scan(&id, &chatId, &messageId, &message, &fileId, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
 
 				return QueueItem{
 					Id:          id,
 					ChatId:      chatId,
 					MessageId:   messageId,
 					Message:     message,
+					FileId:      fileId,
+					FileType:    fileType,
 					EnqueuedOn:  time.Unix(enqueuedOn, 0),
 					FireOn:      time.Unix(fireOn, 0),
 					DeliveredOn: time.Unix(deliveredOn, 0),

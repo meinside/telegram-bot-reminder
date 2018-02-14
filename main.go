@@ -35,7 +35,8 @@ const (
 	MessageParseFailedFormat      = "메시지를 이해하지 못했습니다: %s"
 	MessageCancelWhat             = "어떤 알림을 취소하시겠습니까?"
 	MessageTimeIsPastFormat       = "2006.1.2 15:04는 이미 지난 시각입니다"
-	MessageSendingBackFile        = "받은 파일을 다시 보내드립니다."
+	MessageSendingBackFile        = "받은 파일을 즉시 다시 보내드립니다."
+	MessageWillSendBackFileFormat = "@%s님에게 받은 파일(%s)을 %s에 보내드리겠습니다."
 	MessageUsage                  = `사용법:
 
 * 기본 사용 방법:
@@ -161,18 +162,45 @@ func processQueue(client *bot.Bot) {
 
 	for _, q := range queue {
 		go func(q helper.QueueItem) {
-			// send message
 			message := fmt.Sprintf("%s", q.Message)
 			options := map[string]interface{}{
 				"reply_to_message_id": q.MessageId, // show original message
 			}
-			if sent := client.SendMessage(q.ChatId, message, options); !sent.Ok {
-				log.Printf("*** failed to send reminder: %s", *sent.Description)
+
+			var sent bot.ApiResponseMessage
+
+			// if it is a message with a file,
+			if q.FileId != "" && q.FileType != "" {
+				switch q.FileType {
+				case helper.FileTypeDocument:
+					options["caption"] = message
+					sent = client.SendDocument(q.ChatId, bot.InputFileFromFileId(q.FileId), options)
+				case helper.FileTypeAudio:
+					options["caption"] = message
+					sent = client.SendAudio(q.ChatId, bot.InputFileFromFileId(q.FileId), options)
+				case helper.FileTypePhoto:
+					options["caption"] = message
+					sent = client.SendPhoto(q.ChatId, bot.InputFileFromFileId(q.FileId), options)
+				case helper.FileTypeSticker:
+					sent = client.SendSticker(q.ChatId, bot.InputFileFromFileId(q.FileId), options)
+				case helper.FileTypeVideo:
+					options["caption"] = message
+					sent = client.SendVideo(q.ChatId, bot.InputFileFromFileId(q.FileId), options)
+				case helper.FileTypeVoice:
+					sent = client.SendVoice(q.ChatId, bot.InputFileFromFileId(q.FileId), options)
+				}
 			} else {
+				// if it is just a message,
+				sent = client.SendMessage(q.ChatId, message, options)
+			}
+
+			if sent.Ok {
 				// mark as delivered
 				if !db.MarkQueueItemAsDelivered(q.ChatId, q.Id) {
 					log.Printf("*** failed to mark chat id: %d, queue id: %d", q.ChatId, q.Id)
 				}
+			} else {
+				log.Printf("*** failed to send reminder: %s", *sent.Description)
 			}
 
 			// increase num tries
@@ -200,14 +228,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 			b.SendChatAction(chatId, bot.ChatActionTyping)
 
 			message := ""
-			options := map[string]interface{}{
-				"reply_markup": bot.ReplyKeyboardMarkup{ // show keyboards
-					Keyboard: [][]bot.KeyboardButton{
-						bot.NewKeyboardButtons(CommandListReminders, CommandCancel, CommandHelp),
-					},
-					ResizeKeyboard: true,
-				},
-			}
+			options := defaultOptions()
 
 			if update.Message.HasText() { // text
 				txt := *update.Message.Text
@@ -229,7 +250,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						// inline keyboards
 						keys := make(map[string]string)
 						for _, r := range reminders {
-							keys[fmt.Sprintf("%s @%s", r.Message, r.FireOn.Format("2006.1.2 15:04"))] = fmt.Sprintf("%s %d", CommandCancel, r.Id)
+							keys[fmt.Sprintf("☑ %s @%s", r.Message, r.FireOn.Format("2006.1.2 15:04"))] = fmt.Sprintf("%s %d", CommandCancel, r.Id)
 						}
 						buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
 
@@ -255,7 +276,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 					message = MessageUsage
 				} else {
 					if when, what, err := parseMessage(txt); err == nil {
-						if db.Enqueue(chatId, update.Message.MessageId, txt, when) {
+						if db.Enqueue(chatId, update.Message.MessageId, txt, "", "", when) {
 							message = fmt.Sprintf(MessageResponseFormat,
 								username,
 								when.Format("2006.1.2 15:04"),
@@ -268,67 +289,8 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						message = fmt.Sprintf(MessageParseFailedFormat, err)
 					}
 				}
-			} else if update.Message.HasDocument() { // file
-				fileId := update.Message.Document.FileId
-
-				// send received file back
-				options["caption"] = MessageSendingBackFile
-				if sent := b.SendDocument(chatId, bot.InputFileFromFileId(fileId), options); !sent.Ok {
-					log.Printf("*** failed to send document back: %s", *sent.Description)
-				}
-
-				return
-			} else if update.Message.HasAudio() { // audio
-				fileId := update.Message.Audio.FileId
-
-				// send received file back
-				options["caption"] = MessageSendingBackFile
-				if sent := b.SendAudio(chatId, bot.InputFileFromFileId(fileId), options); !sent.Ok {
-					log.Printf("*** failed to send audio back: %s", *sent.Description)
-				}
-
-				return
-			} else if update.Message.HasPhoto() { // photo
-				options["caption"] = MessageSendingBackFile
-
-				for _, photo := range update.Message.Photo {
-					fileId := photo.FileId
-
-					// send received file back
-					if sent := b.SendPhoto(chatId, bot.InputFileFromFileId(fileId), options); !sent.Ok {
-						log.Printf("*** failed to send photo back: %s", *sent.Description)
-					}
-				}
-
-				return
-			} else if update.Message.HasSticker() { // sticker
-				fileId := update.Message.Sticker.FileId
-
-				// send received file back
-				if sent := b.SendSticker(chatId, bot.InputFileFromFileId(fileId), options); !sent.Ok {
-					log.Printf("*** failed to send sticker back: %s", *sent.Description)
-				}
-
-				return
-			} else if update.Message.HasVideo() { // video
-				fileId := update.Message.Video.FileId
-
-				// send received file back
-				options["caption"] = MessageSendingBackFile
-				if sent := b.SendVideo(chatId, bot.InputFileFromFileId(fileId), options); !sent.Ok {
-					log.Printf("*** failed to send video back: %s", *sent.Description)
-				}
-
-				return
-			} else if update.Message.HasVoice() { // voice
-				fileId := update.Message.Voice.FileId
-
-				// send received file back
-				options["caption"] = MessageSendingBackFile
-				if sent := b.SendVoice(chatId, bot.InputFileFromFileId(fileId), options); !sent.Ok {
-					log.Printf("*** failed to send voice back: %s", *sent.Description)
-				}
-
+			} else {
+				processOthers(b, update)
 				return
 			}
 
@@ -402,6 +364,178 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 	return result
 }
 
+func processOthers(b *bot.Bot, update bot.Update) bool {
+	success := false
+
+	var message string
+	chatId := update.Message.Chat.Id
+	username := *update.Message.From.Username
+	options := defaultOptions()
+
+	if update.Message.HasDocument() { // file
+		fileId := update.Message.Document.FileId
+
+		if update.Message.HasCaption() {
+			txt := *update.Message.Caption
+			if when, _, err := parseMessage(txt); err == nil {
+				// enqueue received file
+				if db.Enqueue(chatId, update.Message.MessageId, txt, fileId, helper.FileTypeDocument, when) {
+					message = fmt.Sprintf(MessageWillSendBackFileFormat,
+						username,
+						"file",
+						when.Format("2006.1.2 15:04"),
+					)
+				} else {
+					message = fmt.Sprintf(MessageSaveFailedFormat, txt)
+				}
+			} else {
+				message = fmt.Sprintf(MessageParseFailedFormat, err)
+			}
+
+			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+				log.Printf("*** failed to send message: %s", *sent.Description)
+			}
+		} else {
+			// send received file back immediately
+			options["caption"] = MessageSendingBackFile
+			if sent := b.SendDocument(chatId, bot.InputFileFromFileId(fileId), options); sent.Ok {
+				success = true
+			} else {
+				log.Printf("*** failed to send document back: %s", *sent.Description)
+			}
+		}
+	} else if update.Message.HasAudio() { // audio
+		fileId := update.Message.Audio.FileId
+
+		if update.Message.HasCaption() {
+			txt := *update.Message.Caption
+			if when, _, err := parseMessage(txt); err == nil {
+				// enqueue received file
+				if db.Enqueue(chatId, update.Message.MessageId, txt, fileId, helper.FileTypeAudio, when) {
+					message = fmt.Sprintf(MessageWillSendBackFileFormat,
+						username,
+						"audio",
+						when.Format("2006.1.2 15:04"),
+					)
+
+					success = true
+				} else {
+					message = fmt.Sprintf(MessageSaveFailedFormat, txt)
+				}
+			} else {
+				message = fmt.Sprintf(MessageParseFailedFormat, err)
+			}
+
+			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+				log.Printf("*** failed to send message: %s", *sent.Description)
+			}
+		} else {
+			// send received file back immediately
+			options["caption"] = MessageSendingBackFile
+			if sent := b.SendAudio(chatId, bot.InputFileFromFileId(fileId), options); sent.Ok {
+				success = true
+			} else {
+				log.Printf("*** failed to send audio back: %s", *sent.Description)
+			}
+		}
+	} else if update.Message.HasPhoto() { // photo
+		if update.Message.HasCaption() {
+			txt := *update.Message.Caption
+			if when, _, err := parseMessage(txt); err == nil {
+				photo := update.Message.LargestPhoto()
+				fileId := photo.FileId
+
+				// enqueue received file
+				if db.Enqueue(chatId, update.Message.MessageId, txt, fileId, helper.FileTypePhoto, when) {
+					message = fmt.Sprintf(MessageWillSendBackFileFormat,
+						username,
+						"image",
+						when.Format("2006.1.2 15:04"),
+					)
+
+					success = true
+				} else {
+					message = fmt.Sprintf(MessageSaveFailedFormat, txt)
+				}
+			} else {
+				message = fmt.Sprintf(MessageParseFailedFormat, err)
+			}
+
+			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+				log.Printf("*** failed to send message: %s", *sent.Description)
+			}
+		} else {
+			options["caption"] = MessageSendingBackFile
+
+			photo := update.Message.LargestPhoto()
+			fileId := photo.FileId
+
+			// send received file back immediately
+			if sent := b.SendPhoto(chatId, bot.InputFileFromFileId(fileId), options); sent.Ok {
+				success = true
+			} else {
+				log.Printf("*** failed to send photo back: %s", *sent.Description)
+			}
+		}
+	} else if update.Message.HasSticker() { // sticker (has no caption)
+		fileId := update.Message.Sticker.FileId
+
+		// send received file back immediately
+		if sent := b.SendSticker(chatId, bot.InputFileFromFileId(fileId), options); sent.Ok {
+			success = true
+		} else {
+			log.Printf("*** failed to send sticker back: %s", *sent.Description)
+		}
+	} else if update.Message.HasVideo() { // video
+		fileId := update.Message.Video.FileId
+
+		if update.Message.HasCaption() {
+			txt := *update.Message.Caption
+			if when, _, err := parseMessage(txt); err == nil {
+				// enqueue received file
+				if db.Enqueue(chatId, update.Message.MessageId, txt, fileId, helper.FileTypeVideo, when) {
+					message = fmt.Sprintf(MessageWillSendBackFileFormat,
+						username,
+						"video",
+						when.Format("2006.1.2 15:04"),
+					)
+
+					success = true
+				} else {
+					message = fmt.Sprintf(MessageSaveFailedFormat, txt)
+				}
+			} else {
+				message = fmt.Sprintf(MessageParseFailedFormat, err)
+			}
+
+			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+				log.Printf("*** failed to send message: %s", *sent.Description)
+			}
+		} else {
+			// send received file back immediately
+			options["caption"] = MessageSendingBackFile
+			if sent := b.SendVideo(chatId, bot.InputFileFromFileId(fileId), options); sent.Ok {
+				success = true
+			} else {
+				log.Printf("*** failed to send video back: %s", *sent.Description)
+			}
+
+		}
+	} else if update.Message.HasVoice() { // voice (has no caption)
+		fileId := update.Message.Voice.FileId
+
+		// send received file back immediately
+		options["caption"] = MessageSendingBackFile
+		if sent := b.SendVoice(chatId, bot.InputFileFromFileId(fileId), options); sent.Ok {
+			success = true
+		} else {
+			log.Printf("*** failed to send voice back: %s", *sent.Description)
+		}
+	}
+
+	return success
+}
+
 func parseMessage(message string) (when time.Time, what string, err error) {
 	now := time.Now()
 
@@ -425,6 +559,17 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 		return when, what, nil
 	} else {
 		return time.Time{}, "", fmt.Errorf(when.Format(MessageTimeIsPastFormat))
+	}
+}
+
+func defaultOptions() map[string]interface{} {
+	return map[string]interface{}{
+		"reply_markup": bot.ReplyKeyboardMarkup{ // show keyboards
+			Keyboard: [][]bot.KeyboardButton{
+				bot.NewKeyboardButtons(CommandListReminders, CommandCancel, CommandHelp),
+			},
+			ResizeKeyboard: true,
+		},
 	}
 }
 
