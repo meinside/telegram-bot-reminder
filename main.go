@@ -163,9 +163,9 @@ func processQueue(client *bot.Bot) {
 	for _, q := range queue {
 		go func(q helper.QueueItem) {
 			message := fmt.Sprintf("%s", q.Message)
-			options := map[string]interface{}{
-				"reply_to_message_id": q.MessageId, // show original message
-			}
+
+			options := defaultOptions()
+			options["reply_to_message_id"] = q.MessageId // show original message
 
 			var sent bot.ApiResponseMessage
 
@@ -562,6 +562,7 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 	}
 }
 
+// default message options
 func defaultOptions() map[string]interface{} {
 	return map[string]interface{}{
 		"reply_markup": bot.ReplyKeyboardMarkup{ // show keyboards
