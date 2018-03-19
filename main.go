@@ -24,6 +24,8 @@ const (
 	CommandCancel        = "/cancel"
 	CommandHelp          = "/help"
 
+	DefaultDatetimeFormat = "2006.01.02 15:04" // yyyy.mm.dd hh:MM
+
 	MessageCancel                 = "취소"
 	MessageCommandCanceled        = "명령이 취소 되었습니다."
 	MessageReminderCanceledFormat = "알림이 취소 되었습니다: %s"
@@ -35,7 +37,7 @@ const (
 	MessageSaveFailedFormat       = "알림 저장을 실패 했습니다: %s"
 	MessageParseFailedFormat      = "메시지를 이해하지 못했습니다: %s"
 	MessageCancelWhat             = "어떤 알림을 취소하시겠습니까?"
-	MessageTimeIsPastFormat       = "2006.1.2 15:04는 이미 지난 시각입니다"
+	MessageTimeIsPastFormat       = "2006.01.02 15:04는 이미 지난 시각입니다"
 	MessageSendingBackFile        = "받은 파일을 즉시 다시 보내드립니다."
 	MessageWillSendBackFileFormat = "@%s님에게 받은 파일(%s)을 %s에 보내드리겠습니다."
 	MessageUsage                  = `사용법:
@@ -241,7 +243,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 					if len(reminders) > 0 {
 						format := fmt.Sprintf("%s\n", MessageListItemFormat)
 						for _, r := range reminders {
-							message += fmt.Sprintf(format, r.FireOn.Format("2006.1.2 15:04"), r.Message)
+							message += fmt.Sprintf(format, r.FireOn.Format(DefaultDatetimeFormat), r.Message)
 						}
 					} else {
 						message = MessageNoReminders
@@ -252,7 +254,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						// inline keyboards
 						keys := make(map[string]string)
 						for _, r := range reminders {
-							keys[fmt.Sprintf(MessageListItemFormat, r.FireOn.Format("2006.1.2 15:04"), r.Message)] = fmt.Sprintf("%s %d", CommandCancel, r.Id)
+							keys[fmt.Sprintf(MessageListItemFormat, r.FireOn.Format(DefaultDatetimeFormat), r.Message)] = fmt.Sprintf("%s %d", CommandCancel, r.Id)
 						}
 						buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
 
@@ -281,7 +283,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						if db.Enqueue(chatId, update.Message.MessageId, txt, "", "", when) {
 							message = fmt.Sprintf(MessageResponseFormat,
 								username,
-								when.Format("2006.1.2 15:04"),
+								when.Format(DefaultDatetimeFormat),
 								what,
 							)
 						} else {
@@ -385,7 +387,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 					message = fmt.Sprintf(MessageWillSendBackFileFormat,
 						username,
 						"file",
-						when.Format("2006.1.2 15:04"),
+						when.Format(DefaultDatetimeFormat),
 					)
 				} else {
 					message = fmt.Sprintf(MessageSaveFailedFormat, txt)
@@ -417,7 +419,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 					message = fmt.Sprintf(MessageWillSendBackFileFormat,
 						username,
 						"audio",
-						when.Format("2006.1.2 15:04"),
+						when.Format(DefaultDatetimeFormat),
 					)
 
 					success = true
@@ -452,7 +454,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 					message = fmt.Sprintf(MessageWillSendBackFileFormat,
 						username,
 						"image",
-						when.Format("2006.1.2 15:04"),
+						when.Format(DefaultDatetimeFormat),
 					)
 
 					success = true
@@ -499,7 +501,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 					message = fmt.Sprintf(MessageWillSendBackFileFormat,
 						username,
 						"video",
-						when.Format("2006.1.2 15:04"),
+						when.Format(DefaultDatetimeFormat),
 					)
 
 					success = true
