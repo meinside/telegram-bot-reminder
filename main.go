@@ -30,6 +30,7 @@ const (
 	MessageError                  = "오류가 발생했습니다."
 	MessageNoReminders            = "예약된 알림이 없습니다."
 	MessageNoDateTime             = "날짜 또는 시간이 없습니다."
+	MessageListItemFormat         = "☑ %s; %s"
 	MessageResponseFormat         = `@%s님에게 %s에 "%s" 알림 예정입니다.`
 	MessageSaveFailedFormat       = "알림 저장을 실패 했습니다: %s"
 	MessageParseFailedFormat      = "메시지를 이해하지 못했습니다: %s"
@@ -238,8 +239,9 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				} else if strings.HasPrefix(txt, CommandListReminders) {
 					reminders := db.UndeliveredQueueItems(chatId)
 					if len(reminders) > 0 {
+						format := fmt.Sprintf("%s\n", MessageListItemFormat)
 						for _, r := range reminders {
-							message += fmt.Sprintf("☑ %s @%s\n", r.Message, r.FireOn.Format("2006.1.2 15:04"))
+							message += fmt.Sprintf(format, r.FireOn.Format("2006.1.2 15:04"), r.Message)
 						}
 					} else {
 						message = MessageNoReminders
@@ -250,7 +252,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						// inline keyboards
 						keys := make(map[string]string)
 						for _, r := range reminders {
-							keys[fmt.Sprintf("☑ %s @%s", r.Message, r.FireOn.Format("2006.1.2 15:04"))] = fmt.Sprintf("%s %d", CommandCancel, r.Id)
+							keys[fmt.Sprintf(MessageListItemFormat, r.FireOn.Format("2006.1.2 15:04"), r.Message)] = fmt.Sprintf("%s %d", CommandCancel, r.Id)
 						}
 						buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
 

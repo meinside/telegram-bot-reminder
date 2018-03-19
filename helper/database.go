@@ -202,6 +202,7 @@ func (d *Database) Enqueue(chatId int64, messageId int, message, fileId string, 
 	return result
 }
 
+// DeliverableQueueItems fetches all items from the queue which need to be delivered right now.
 func (d *Database) DeliverableQueueItems(maxNumTries int) []QueueItem {
 	queue := []QueueItem{}
 	if maxNumTries <= 0 {
@@ -260,6 +261,7 @@ func (d *Database) DeliverableQueueItems(maxNumTries int) []QueueItem {
 	return queue
 }
 
+// UndeliveredQueueItems fetches all undelivered items from the queue.
 func (d *Database) UndeliveredQueueItems(chatId int64) []QueueItem {
 	queue := []QueueItem{}
 
@@ -277,7 +279,7 @@ func (d *Database) UndeliveredQueueItems(chatId int64) []QueueItem {
 		ifnull(delivered_on, 0) as delivered_on
 		from queue
 		where chat_id = ? and delivered_on is null
-		order by enqueued_on desc`); err != nil {
+		order by fire_on asc`); err != nil {
 		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
