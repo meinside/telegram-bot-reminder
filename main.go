@@ -547,13 +547,17 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 
 	var hour, minute int
 	if when, err = lkdp.ExtractDate(message, true); err == nil {
-		if hour, minute, _, err = lkdp.ExtractTime(message, false); err != nil {
+		if hour, minute, _, _, err = lkdp.ExtractTime(message, false); err != nil {
 			hour, minute = 8, 0 // XXX - 08:00 as default
 		}
 		when = when.Add(time.Duration(hour) * time.Hour).Add(time.Duration(minute) * time.Minute)
 	} else {
-		if hour, minute, _, err = lkdp.ExtractTime(message, false); err == nil {
+		var daysChanged int
+		if hour, minute, _, daysChanged, err = lkdp.ExtractTime(message, false); err == nil {
 			when = time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, _location)
+			if daysChanged != 0 {
+				when = when.Add(time.Duration(daysChanged*24) * time.Hour)
+			}
 		} else {
 			return time.Time{}, "", fmt.Errorf(MessageNoDateTime)
 		}
