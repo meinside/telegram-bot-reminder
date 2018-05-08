@@ -26,11 +26,11 @@ type Log struct {
 }
 
 type QueueItem struct {
-	Id          int64     `json:"id"`
-	ChatId      int64     `json:"chat_id"`
-	MessageId   int       `json:"message_id"`
+	ID          int64     `json:"id"`
+	ChatID      int64     `json:"chat_id"`
+	MessageID   int       `json:"message_id"`
 	Message     string    `json:"message"`
-	FileId      string    `json:"file_id,omitempty"`
+	FileID      string    `json:"file_id,omitempty"`
 	FileType    FileType  `json:"file_type,omitempty"`
 	EnqueuedOn  time.Time `json:"enqueued_on"`
 	FireOn      time.Time `json:"fire_on"`
@@ -180,7 +180,7 @@ func (d *Database) GetLogs(latestN int) []Log {
 	return logs
 }
 
-func (d *Database) Enqueue(chatId int64, messageId int, message, fileId string, fileType FileType, fireOn time.Time) bool {
+func (d *Database) Enqueue(chatID int64, messageID int, message, fileID string, fileType FileType, fireOn time.Time) bool {
 	result := false
 
 	d.Lock()
@@ -190,7 +190,7 @@ func (d *Database) Enqueue(chatId int64, messageId int, message, fileId string, 
 	} else {
 		defer stmt.Close()
 
-		if _, err = stmt.Exec(chatId, messageId, message, fileId, fileType, fireOn.Unix()); err != nil {
+		if _, err = stmt.Exec(chatID, messageID, message, fileID, fileType, fireOn.Unix()); err != nil {
 			log.Printf("*** Failed to save queue item into local database: %s", err.Error())
 		} else {
 			result = true
@@ -233,20 +233,20 @@ func (d *Database) DeliverableQueueItems(maxNumTries int) []QueueItem {
 		} else {
 			defer rows.Close()
 
-			var id, chatId int64
-			var messageId int
-			var message, fileId string
+			var id, chatID int64
+			var messageID int
+			var message, fileID string
 			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
 			for rows.Next() {
-				rows.Scan(&id, &chatId, &messageId, &message, &fileId, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
+				rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
 
 				queue = append(queue, QueueItem{
-					Id:          id,
-					ChatId:      chatId,
-					MessageId:   messageId,
+					ID:          id,
+					ChatID:      chatID,
+					MessageID:   messageID,
 					Message:     message,
-					FileId:      fileId,
+					FileID:      fileID,
 					FileType:    fileType,
 					EnqueuedOn:  time.Unix(enqueuedOn, 0),
 					FireOn:      time.Unix(fireOn, 0),
@@ -262,7 +262,7 @@ func (d *Database) DeliverableQueueItems(maxNumTries int) []QueueItem {
 }
 
 // UndeliveredQueueItems fetches all undelivered items from the queue.
-func (d *Database) UndeliveredQueueItems(chatId int64) []QueueItem {
+func (d *Database) UndeliveredQueueItems(chatID int64) []QueueItem {
 	queue := []QueueItem{}
 
 	d.RLock()
@@ -284,25 +284,25 @@ func (d *Database) UndeliveredQueueItems(chatId int64) []QueueItem {
 	} else {
 		defer stmt.Close()
 
-		if rows, err := stmt.Query(chatId); err != nil {
+		if rows, err := stmt.Query(chatID); err != nil {
 			log.Printf("*** Failed to select queue items from local database: %s", err.Error())
 		} else {
 			defer rows.Close()
 
-			var id, chatId int64
-			var messageId int
-			var message, fileId string
+			var id, chatID int64
+			var messageID int
+			var message, fileID string
 			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
 			for rows.Next() {
-				rows.Scan(&id, &chatId, &messageId, &message, &fileId, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
+				rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
 
 				queue = append(queue, QueueItem{
-					Id:          id,
-					ChatId:      chatId,
-					MessageId:   messageId,
+					ID:          id,
+					ChatID:      chatID,
+					MessageID:   messageID,
 					Message:     message,
-					FileId:      fileId,
+					FileID:      fileID,
 					FileType:    fileType,
 					EnqueuedOn:  time.Unix(enqueuedOn, 0),
 					FireOn:      time.Unix(fireOn, 0),
@@ -317,7 +317,7 @@ func (d *Database) UndeliveredQueueItems(chatId int64) []QueueItem {
 	return queue
 }
 
-func (d *Database) GetQueueItem(chatId, queueId int64) (QueueItem, error) {
+func (d *Database) GetQueueItem(chatID, queueID int64) (QueueItem, error) {
 	d.RLock()
 	defer d.RUnlock()
 
@@ -341,34 +341,34 @@ func (d *Database) GetQueueItem(chatId, queueId int64) (QueueItem, error) {
 		defer stmt.Close()
 
 		var rows *sql.Rows
-		if rows, err = stmt.Query(queueId, chatId); err != nil {
+		if rows, err = stmt.Query(queueID, chatID); err != nil {
 			log.Printf("*** Failed to select a queue item from local database: %s", err.Error())
 		} else {
 			defer rows.Close()
 
-			var id, chatId int64
-			var messageId int
-			var message, fileId string
+			var id, chatID int64
+			var messageID int
+			var message, fileID string
 			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
 			if rows.Next() {
-				rows.Scan(&id, &chatId, &messageId, &message, &fileId, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
+				rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
 
 				return QueueItem{
-					Id:          id,
-					ChatId:      chatId,
-					MessageId:   messageId,
+					ID:          id,
+					ChatID:      chatID,
+					MessageID:   messageID,
 					Message:     message,
-					FileId:      fileId,
+					FileID:      fileID,
 					FileType:    fileType,
 					EnqueuedOn:  time.Unix(enqueuedOn, 0),
 					FireOn:      time.Unix(fireOn, 0),
 					DeliveredOn: time.Unix(deliveredOn, 0),
 				}, nil
 			} else {
-				log.Printf("*** Failed to select a queue item with id = %d, chat_id = %d from local database", id, chatId)
+				log.Printf("*** Failed to select a queue item with id = %d, chat_id = %d from local database", id, chatID)
 
-				err = fmt.Errorf("no such queue item with id = %d, chat_id = %d", id, chatId)
+				err = fmt.Errorf("no such queue item with id = %d, chat_id = %d", id, chatID)
 			}
 		}
 	}
@@ -376,7 +376,7 @@ func (d *Database) GetQueueItem(chatId, queueId int64) (QueueItem, error) {
 	return QueueItem{}, err
 }
 
-func (d *Database) DeleteQueueItem(chatId, queueId int64) bool {
+func (d *Database) DeleteQueueItem(chatID, queueID int64) bool {
 	result := false
 
 	d.Lock()
@@ -385,7 +385,7 @@ func (d *Database) DeleteQueueItem(chatId, queueId int64) bool {
 		log.Printf("*** Failed to prepare a statement: %s", err.Error())
 	} else {
 		defer stmt.Close()
-		if _, err = stmt.Exec(queueId, chatId); err != nil {
+		if _, err = stmt.Exec(queueID, chatID); err != nil {
 			log.Printf("*** Failed to delete queue item from local database: %s", err.Error())
 		} else {
 			result = true
@@ -397,7 +397,7 @@ func (d *Database) DeleteQueueItem(chatId, queueId int64) bool {
 	return result
 }
 
-func (d *Database) IncreaseNumTries(chatId, queueId int64) bool {
+func (d *Database) IncreaseNumTries(chatID, queueID int64) bool {
 	result := false
 
 	d.Lock()
@@ -408,11 +408,11 @@ func (d *Database) IncreaseNumTries(chatId, queueId int64) bool {
 		defer stmt.Close()
 
 		var res sql.Result
-		if res, err = stmt.Exec(queueId, chatId); err != nil {
+		if res, err = stmt.Exec(queueID, chatID); err != nil {
 			log.Printf("*** Failed to increase num_tries in local database: %s", err.Error())
 		} else {
 			if num, _ := res.RowsAffected(); num <= 0 {
-				log.Printf("*** Failed to increase num_tires for id: %d, chat_id: %d", queueId, chatId)
+				log.Printf("*** Failed to increase num_tires for id: %d, chat_id: %d", queueID, chatID)
 			} else {
 				result = true
 			}
@@ -424,7 +424,7 @@ func (d *Database) IncreaseNumTries(chatId, queueId int64) bool {
 	return result
 }
 
-func (d *Database) MarkQueueItemAsDelivered(chatId, queueId int64) bool {
+func (d *Database) MarkQueueItemAsDelivered(chatID, queueID int64) bool {
 	result := false
 
 	d.Lock()
@@ -437,11 +437,11 @@ func (d *Database) MarkQueueItemAsDelivered(chatId, queueId int64) bool {
 		now := time.Now()
 
 		var res sql.Result
-		if res, err = stmt.Exec(now.Unix(), queueId, chatId); err != nil {
+		if res, err = stmt.Exec(now.Unix(), queueID, chatID); err != nil {
 			log.Printf("*** Failed to mark delivered_on in local database: %s", err.Error())
 		} else {
 			if num, _ := res.RowsAffected(); num <= 0 {
-				log.Printf("*** Failed to mark delivered_on for id: %d, chat_id: %d", queueId, chatId)
+				log.Printf("*** Failed to mark delivered_on for id: %d, chat_id: %d", queueID, chatID)
 			} else {
 				result = true
 			}
