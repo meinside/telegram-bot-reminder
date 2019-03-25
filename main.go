@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/meinside/lazy-korean-date-parser-go"
+	lkdp "github.com/meinside/lazy-korean-date-parser-go"
 	bot "github.com/meinside/telegram-bot-go"
 
 	"github.com/meinside/telegram-bot-reminder/helper"
@@ -78,7 +78,7 @@ var _allowedUserIds []string
 var _isVerbose bool
 
 type config struct {
-	TelegramApiToken        string   `json:"telegram_api_token"`
+	TelegramAPIToken        string   `json:"telegram_api_token"`
 	MonitorIntervalSeconds  int      `json:"monitor_interval_seconds"`
 	TelegramIntervalSeconds int      `json:"telegram_interval_seconds"`
 	MaxNumTries             int      `json:"max_num_tries"`
@@ -88,15 +88,13 @@ type config struct {
 }
 
 func openConfig() (conf config, err error) {
-	if file, err := ioutil.ReadFile(configFilename); err == nil {
-		if err := json.Unmarshal(file, &conf); err == nil {
+	var file []byte
+	if file, err = ioutil.ReadFile(configFilename); err == nil {
+		if err = json.Unmarshal(file, &conf); err == nil {
 			return conf, nil
-		} else {
-			return config{}, err
 		}
-	} else {
-		return config{}, err
 	}
+	return config{}, err
 }
 
 func init() {
@@ -122,7 +120,7 @@ func init() {
 		_restrictUsers = _conf.RestrictUsers
 		_allowedUserIds = _conf.AllowedUserIds
 
-		telegram = bot.NewClient(_conf.TelegramApiToken)
+		telegram = bot.NewClient(_conf.TelegramAPIToken)
 		telegram.Verbose = _conf.IsVerbose
 
 		db = helper.OpenDb(dbFilename)
@@ -133,7 +131,7 @@ func init() {
 }
 
 // check if given Telegram id is allowed or not
-func isAllowedId(id string) bool {
+func isAllowedID(id string) bool {
 	if _restrictUsers == false {
 		return true
 	}
@@ -219,16 +217,16 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 		if update.HasMessage() {
 			username := *update.Message.From.Username
 
-			if !isAllowedId(username) {
+			if !isAllowedID(username) {
 				log.Printf("*** Id not allowed: %s", username)
 
 				return
 			}
 
-			chatId := update.Message.Chat.ID
+			chatID := update.Message.Chat.ID
 
 			// 'is typing...'
-			b.SendChatAction(chatId, bot.ChatActionTyping)
+			b.SendChatAction(chatID, bot.ChatActionTyping)
 
 			message := ""
 			options := defaultOptions()
@@ -239,7 +237,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				if strings.HasPrefix(txt, commandStart) { // /start
 					message = messageUsage
 				} else if strings.HasPrefix(txt, commandListReminders) {
-					reminders := db.UndeliveredQueueItems(chatId)
+					reminders := db.UndeliveredQueueItems(chatID)
 					if len(reminders) > 0 {
 						format := fmt.Sprintf("%s\n", messageListItemFormat)
 						for _, r := range reminders {
@@ -249,7 +247,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						message = messageNoReminders
 					}
 				} else if strings.HasPrefix(txt, commandCancel) {
-					reminders := db.UndeliveredQueueItems(chatId)
+					reminders := db.UndeliveredQueueItems(chatID)
 					if len(reminders) > 0 {
 						// inline keyboards
 						keys := make(map[string]string)
@@ -280,7 +278,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 					message = messageUsage
 				} else {
 					if when, what, err := parseMessage(txt); err == nil {
-						if db.Enqueue(chatId, update.Message.MessageID, txt, "", "", when) {
+						if db.Enqueue(chatID, update.Message.MessageID, txt, "", "", when) {
 							message = fmt.Sprintf(messageResponseFormat,
 								username,
 								when.Format(defaultDatetimeFormat),
@@ -302,7 +300,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 			if len(message) <= 0 {
 				message = messageError
 			}
-			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
 				log.Printf("*** failed to send message: %s", *sent.Description)
 			}
 		} else if update.HasCallbackQuery() {
@@ -321,15 +319,15 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 	query := *update.CallbackQuery
 	txt := *query.Data
 
-	var message string = messageError
+	var message = messageError
 	if strings.HasPrefix(txt, commandCancel) {
 		if txt == commandCancel {
 			message = messageCommandCanceled
 		} else {
 			cancelParam := strings.TrimSpace(strings.Replace(txt, commandCancel, "", 1))
-			if queueId, err := strconv.Atoi(cancelParam); err == nil {
-				if item, err := db.GetQueueItem(query.Message.Chat.ID, int64(queueId)); err == nil {
-					if db.DeleteQueueItem(query.Message.Chat.ID, int64(queueId)) {
+			if queueID, err := strconv.Atoi(cancelParam); err == nil {
+				if item, err := db.GetQueueItem(query.Message.Chat.ID, int64(queueID)); err == nil {
+					if db.DeleteQueueItem(query.Message.Chat.ID, int64(queueID)) {
 						message = fmt.Sprintf(messageReminderCanceledFormat, item.Message)
 					} else {
 						log.Printf("*** Failed to delete reminder")
@@ -372,18 +370,18 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 	success := false
 
 	var message string
-	chatId := update.Message.Chat.ID
+	chatID := update.Message.Chat.ID
 	username := *update.Message.From.Username
 	options := defaultOptions()
 
 	if update.Message.HasDocument() { // file
-		fileId := update.Message.Document.FileID
+		fileID := update.Message.Document.FileID
 
 		if update.Message.HasCaption() {
 			txt := *update.Message.Caption
 			if when, _, err := parseMessage(txt); err == nil {
 				// enqueue received file
-				if db.Enqueue(chatId, update.Message.MessageID, txt, fileId, helper.FileTypeDocument, when) {
+				if db.Enqueue(chatID, update.Message.MessageID, txt, fileID, helper.FileTypeDocument, when) {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"file",
@@ -396,26 +394,26 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
 			}
 
-			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
 				log.Printf("*** failed to send message: %s", *sent.Description)
 			}
 		} else {
 			// send received file back immediately
 			options["caption"] = messageSendingBackFile
-			if sent := b.SendDocument(chatId, bot.InputFileFromFileID(fileId), options); sent.Ok {
+			if sent := b.SendDocument(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 				success = true
 			} else {
 				log.Printf("*** failed to send document back: %s", *sent.Description)
 			}
 		}
 	} else if update.Message.HasAudio() { // audio
-		fileId := update.Message.Audio.FileID
+		fileID := update.Message.Audio.FileID
 
 		if update.Message.HasCaption() {
 			txt := *update.Message.Caption
 			if when, _, err := parseMessage(txt); err == nil {
 				// enqueue received file
-				if db.Enqueue(chatId, update.Message.MessageID, txt, fileId, helper.FileTypeAudio, when) {
+				if db.Enqueue(chatID, update.Message.MessageID, txt, fileID, helper.FileTypeAudio, when) {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"audio",
@@ -430,13 +428,13 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
 			}
 
-			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
 				log.Printf("*** failed to send message: %s", *sent.Description)
 			}
 		} else {
 			// send received file back immediately
 			options["caption"] = messageSendingBackFile
-			if sent := b.SendAudio(chatId, bot.InputFileFromFileID(fileId), options); sent.Ok {
+			if sent := b.SendAudio(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 				success = true
 			} else {
 				log.Printf("*** failed to send audio back: %s", *sent.Description)
@@ -447,10 +445,10 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			txt := *update.Message.Caption
 			if when, _, err := parseMessage(txt); err == nil {
 				photo := update.Message.LargestPhoto()
-				fileId := photo.FileID
+				fileID := photo.FileID
 
 				// enqueue received file
-				if db.Enqueue(chatId, update.Message.MessageID, txt, fileId, helper.FileTypePhoto, when) {
+				if db.Enqueue(chatID, update.Message.MessageID, txt, fileID, helper.FileTypePhoto, when) {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"image",
@@ -465,39 +463,39 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
 			}
 
-			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
 				log.Printf("*** failed to send message: %s", *sent.Description)
 			}
 		} else {
 			options["caption"] = messageSendingBackFile
 
 			photo := update.Message.LargestPhoto()
-			fileId := photo.FileID
+			fileID := photo.FileID
 
 			// send received file back immediately
-			if sent := b.SendPhoto(chatId, bot.InputFileFromFileID(fileId), options); sent.Ok {
+			if sent := b.SendPhoto(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 				success = true
 			} else {
 				log.Printf("*** failed to send photo back: %s", *sent.Description)
 			}
 		}
 	} else if update.Message.HasSticker() { // sticker (has no caption)
-		fileId := update.Message.Sticker.FileID
+		fileID := update.Message.Sticker.FileID
 
 		// send received file back immediately
-		if sent := b.SendSticker(chatId, bot.InputFileFromFileID(fileId), options); sent.Ok {
+		if sent := b.SendSticker(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 			success = true
 		} else {
 			log.Printf("*** failed to send sticker back: %s", *sent.Description)
 		}
 	} else if update.Message.HasVideo() { // video
-		fileId := update.Message.Video.FileID
+		fileID := update.Message.Video.FileID
 
 		if update.Message.HasCaption() {
 			txt := *update.Message.Caption
 			if when, _, err := parseMessage(txt); err == nil {
 				// enqueue received file
-				if db.Enqueue(chatId, update.Message.MessageID, txt, fileId, helper.FileTypeVideo, when) {
+				if db.Enqueue(chatID, update.Message.MessageID, txt, fileID, helper.FileTypeVideo, when) {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"video",
@@ -512,13 +510,13 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
 			}
 
-			if sent := b.SendMessage(chatId, message, options); !sent.Ok {
+			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
 				log.Printf("*** failed to send message: %s", *sent.Description)
 			}
 		} else {
 			// send received file back immediately
 			options["caption"] = messageSendingBackFile
-			if sent := b.SendVideo(chatId, bot.InputFileFromFileID(fileId), options); sent.Ok {
+			if sent := b.SendVideo(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 				success = true
 			} else {
 				log.Printf("*** failed to send video back: %s", *sent.Description)
@@ -526,11 +524,11 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 
 		}
 	} else if update.Message.HasVoice() { // voice (has no caption)
-		fileId := update.Message.Voice.FileID
+		fileID := update.Message.Voice.FileID
 
 		// send received file back immediately
 		options["caption"] = messageSendingBackFile
-		if sent := b.SendVoice(chatId, bot.InputFileFromFileID(fileId), options); sent.Ok {
+		if sent := b.SendVoice(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 			success = true
 		} else {
 			log.Printf("*** failed to send voice back: %s", *sent.Description)
@@ -545,16 +543,16 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 
 	what = fmt.Sprintf("%s", message) // XXX - edit this?
 
-	var hour, minute int
+	var hms lkdp.Hms
 	if when, err = lkdp.ExtractDate(message, true); err == nil {
-		if hour, minute, _, _, err = lkdp.ExtractTime(message, false); err != nil {
-			hour, minute = 8, 0 // XXX - 08:00 as default
+		if hms, err = lkdp.ExtractTime(message, false); err != nil {
+			hms.Hours, hms.Minutes = 8, 0 // XXX - 08:00 as default
 		}
-		when = when.Add(time.Duration(hour) * time.Hour).Add(time.Duration(minute) * time.Minute)
+		when = when.Add(time.Duration(hms.Hours) * time.Hour).Add(time.Duration(hms.Minutes) * time.Minute)
 	} else {
 		var daysChanged int
-		if hour, minute, _, daysChanged, err = lkdp.ExtractTime(message, false); err == nil {
-			when = time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, _location)
+		if hms, err = lkdp.ExtractTime(message, false); err == nil {
+			when = time.Date(now.Year(), now.Month(), now.Day(), hms.Hours, hms.Minutes, 0, 0, _location)
 			if daysChanged != 0 {
 				when = when.Add(time.Duration(daysChanged*24) * time.Hour)
 			}
@@ -565,9 +563,9 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 
 	if when.Unix() >= now.Unix() {
 		return when, what, nil
-	} else {
-		return time.Time{}, "", fmt.Errorf(when.Format(messageTimeIsPastFormat))
 	}
+
+	return time.Time{}, "", fmt.Errorf(when.Format(messageTimeIsPastFormat))
 }
 
 // default message options
