@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,8 +18,8 @@ import (
 )
 
 const (
-	dbFilename     = "db.sqlite"
 	configFilename = "config.json"
+	dbFilename     = "db.sqlite"
 
 	commandStart         = "/start"
 	commandListReminders = "/list"
@@ -87,13 +89,24 @@ type config struct {
 	IsVerbose               bool     `json:"is_verbose,omitempty"`
 }
 
+func pwd() string {
+	if execPath, err := os.Executable(); err == nil {
+		return filepath.Dir(execPath)
+	} else {
+		log.Printf("failed to get executable path: %s", err)
+	}
+
+	return "." // fallback to 'current directory'
+}
+
 func openConfig() (conf config, err error) {
 	var file []byte
-	if file, err = ioutil.ReadFile(configFilename); err == nil {
+	if file, err = ioutil.ReadFile(filepath.Join(pwd(), configFilename)); err == nil {
 		if err = json.Unmarshal(file, &conf); err == nil {
 			return conf, nil
 		}
 	}
+
 	return config{}, err
 }
 
@@ -123,7 +136,7 @@ func init() {
 		telegram = bot.NewClient(_conf.TelegramAPIToken)
 		telegram.Verbose = _conf.IsVerbose
 
-		db = helper.OpenDb(dbFilename)
+		db = helper.OpenDb(filepath.Join(pwd(), dbFilename))
 
 		_location, _ = time.LoadLocation("Local")
 		_isVerbose = _conf.IsVerbose
