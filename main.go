@@ -100,8 +100,12 @@ func pwd() string {
 }
 
 func openConfig() (conf config, err error) {
+	confFilepath := filepath.Join(pwd(), configFilename)
+
+	log.Printf("reading config: %s", confFilepath)
+
 	var file []byte
-	if file, err = ioutil.ReadFile(filepath.Join(pwd(), configFilename)); err == nil {
+	if file, err = ioutil.ReadFile(confFilepath); err == nil {
 		if err = json.Unmarshal(file, &conf); err == nil {
 			return conf, nil
 		}
@@ -136,7 +140,11 @@ func init() {
 		telegram = bot.NewClient(_conf.TelegramAPIToken)
 		telegram.Verbose = _conf.IsVerbose
 
-		db = helper.OpenDb(filepath.Join(pwd(), dbFilename))
+		dbFilepath := filepath.Join(pwd(), dbFilename)
+
+		log.Printf("reading database: %s", dbFilepath)
+
+		db = helper.OpenDb(dbFilepath)
 
 		_location, _ = time.LoadLocation("Local")
 		_isVerbose = _conf.IsVerbose
@@ -595,7 +603,7 @@ func defaultOptions() map[string]interface{} {
 
 func main() {
 	// monitor queue
-	log.Printf("> Starting monitoring queue...")
+	log.Printf("starting monitoring queue...")
 	go monitorQueue(
 		time.NewTicker(time.Duration(_monitorIntervalSeconds)*time.Second),
 		telegram,
@@ -603,7 +611,7 @@ func main() {
 
 	// get info about this bot
 	if me := telegram.GetMe(); me.Ok {
-		log.Printf("> Starting bot: @%s (%s)", *me.Result.Username, me.Result.FirstName)
+		log.Printf("starting bot: @%s (%s)", *me.Result.Username, me.Result.FirstName)
 
 		// delete webhook (getting updates will not work when wehbook is set up)
 		if unhooked := telegram.DeleteWebhook(); unhooked.Ok {

@@ -13,12 +13,6 @@ $ go get -d github.com/meinside/telegram-bot-reminder
 $ cd $GOPATH/src/github.com/meinside/telegram-bot-reminder
 ```
 
-## build
-
-```bash
-$ go build
-```
-
 ## configure
 
 샘플로 들어있는 config.json.sample을 config.json으로 복사, 고쳐서 사용
@@ -32,11 +26,28 @@ $ vi config.json
 
 ## run
 
+### A. build and run
+
 ```bash
+$ go build
 $ ./telegram-bot-reminder
 ```
 
-## 용례
+### B. with docker-compose
+
+```bash
+$ docker-compose build
+```
+
+로 build 후,
+
+```bash
+$ docker-compose up -d
+```
+
+등으로 실행.
+
+## 메시지 용례
 
 * "내일 이 메시지 다시 보내줄래?" => 다음날 08:00에 알림
 * "18:30 알림" => 오늘 18:30에 알림
