@@ -19,8 +19,8 @@ COPY ./ ./
 # Build source files statically (without CGO_ENABLED=0)
 RUN go build \
 		-installsuffix 'static' \
-        -o /app \
-        .
+		-o /app \
+		.
 
 # Minimal image for running the application
 FROM alpine:latest as final
