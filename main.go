@@ -89,11 +89,14 @@ type config struct {
 	IsVerbose               bool     `json:"is_verbose,omitempty"`
 }
 
+var _stdout = log.New(os.Stdout, "", log.LstdFlags)
+var _stderr = log.New(os.Stderr, "", log.LstdFlags)
+
 func pwd() string {
 	if execPath, err := os.Executable(); err == nil {
 		return filepath.Dir(execPath)
 	} else {
-		log.Printf("failed to get executable path: %s", err)
+		_stderr.Printf("failed to get executable path: %s", err)
 	}
 
 	return "." // fallback to 'current directory'
@@ -102,7 +105,7 @@ func pwd() string {
 func openConfig() (conf config, err error) {
 	confFilepath := filepath.Join(pwd(), configFilename)
 
-	log.Printf("reading config: %s", confFilepath)
+	_stdout.Printf("reading config: %s", confFilepath)
 
 	var file []byte
 	if file, err = ioutil.ReadFile(confFilepath); err == nil {
@@ -142,7 +145,9 @@ func init() {
 
 		dbFilepath := filepath.Join(pwd(), dbFilename)
 
-		log.Printf("reading database: %s", dbFilepath)
+		if _conf.IsVerbose {
+			_stdout.Printf("reading database: %s", dbFilepath)
+		}
 
 		db = helper.OpenDb(dbFilepath)
 
@@ -179,7 +184,7 @@ func processQueue(client *bot.Bot) {
 	queue := db.DeliverableQueueItems(_maxNumTries)
 
 	if _isVerbose {
-		log.Printf("Checking queue: %d items...", len(queue))
+		_stdout.Printf("checking queue: %d items...", len(queue))
 	}
 
 	for _, q := range queue {
@@ -219,15 +224,15 @@ func processQueue(client *bot.Bot) {
 			if sent.Ok {
 				// mark as delivered
 				if !db.MarkQueueItemAsDelivered(q.ChatID, q.ID) {
-					log.Printf("*** failed to mark chat id: %d, queue id: %d", q.ChatID, q.ID)
+					_stderr.Printf("failed to mark chat id: %d, queue id: %d", q.ChatID, q.ID)
 				}
 			} else {
-				log.Printf("*** failed to send reminder: %s", *sent.Description)
+				_stderr.Printf("failed to send reminder: %s", *sent.Description)
 			}
 
 			// increase num tries
 			if !db.IncreaseNumTries(q.ChatID, q.ID) {
-				log.Printf("*** failed to increase num tries for chat id: %d, queue id: %d", q.ChatID, q.ID)
+				_stderr.Printf("failed to increase num tries for chat id: %d, queue id: %d", q.ChatID, q.ID)
 			}
 		}(q)
 	}
@@ -239,7 +244,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 			username := *update.Message.From.Username
 
 			if !isAllowedID(username) {
-				log.Printf("*** Id not allowed: %s", username)
+				_stderr.Printf("id not allowed: %s", username)
 
 				return
 			}
@@ -322,13 +327,13 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				message = messageError
 			}
 			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
-				log.Printf("*** failed to send message: %s", *sent.Description)
+				_stderr.Printf("failed to send message: %s", *sent.Description)
 			}
 		} else if update.HasCallbackQuery() {
 			processCallbackQuery(b, update)
 		}
 	} else {
-		log.Printf("*** error while receiving update (%s)", err.Error())
+		_stderr.Printf("error while receiving update (%s)", err.Error())
 	}
 }
 
@@ -351,17 +356,17 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 					if db.DeleteQueueItem(query.Message.Chat.ID, int64(queueID)) {
 						message = fmt.Sprintf(messageReminderCanceledFormat, item.Message)
 					} else {
-						log.Printf("*** Failed to delete reminder")
+						_stderr.Printf("failed to delete reminder")
 					}
 				} else {
-					log.Printf("*** Failed to get reminder: %s", err)
+					_stderr.Printf("failed to get reminder: %s", err)
 				}
 			} else {
-				log.Printf("*** Unprocessable callback query: %s", txt)
+				_stderr.Printf("unprocessable callback query: %s", txt)
 			}
 		}
 	} else {
-		log.Printf("*** Unprocessable callback query: %s", txt)
+		_stderr.Printf("unprocessable callback query: %s", txt)
 	}
 
 	// answer callback query
@@ -374,12 +379,12 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 		if apiResult := b.EditMessageText(message, options); apiResult.Ok {
 			result = true
 		} else {
-			log.Printf("*** Failed to edit message text: %s", *apiResult.Description)
+			_stderr.Printf("failed to edit message text: %s", *apiResult.Description)
 
 			db.LogError(fmt.Sprintf("failed to edit message text: %s", *apiResult.Description))
 		}
 	} else {
-		log.Printf("*** Failed to answer callback query: %+v", query)
+		_stderr.Printf("failed to answer callback query: %+v", query)
 
 		db.LogError(fmt.Sprintf("failed to answer callback query: %+v", query))
 	}
@@ -416,7 +421,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			}
 
 			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
-				log.Printf("*** failed to send message: %s", *sent.Description)
+				_stderr.Printf("failed to send message: %s", *sent.Description)
 			}
 		} else {
 			// send received file back immediately
@@ -424,7 +429,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			if sent := b.SendDocument(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 				success = true
 			} else {
-				log.Printf("*** failed to send document back: %s", *sent.Description)
+				_stderr.Printf("failed to send document back: %s", *sent.Description)
 			}
 		}
 	} else if update.Message.HasAudio() { // audio
@@ -450,7 +455,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			}
 
 			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
-				log.Printf("*** failed to send message: %s", *sent.Description)
+				_stderr.Printf("failed to send message: %s", *sent.Description)
 			}
 		} else {
 			// send received file back immediately
@@ -458,7 +463,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			if sent := b.SendAudio(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 				success = true
 			} else {
-				log.Printf("*** failed to send audio back: %s", *sent.Description)
+				_stderr.Printf("failed to send audio back: %s", *sent.Description)
 			}
 		}
 	} else if update.Message.HasPhoto() { // photo
@@ -485,7 +490,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			}
 
 			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
-				log.Printf("*** failed to send message: %s", *sent.Description)
+				_stderr.Printf("failed to send message: %s", *sent.Description)
 			}
 		} else {
 			options["caption"] = messageSendingBackFile
@@ -497,7 +502,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			if sent := b.SendPhoto(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 				success = true
 			} else {
-				log.Printf("*** failed to send photo back: %s", *sent.Description)
+				_stderr.Printf("failed to send photo back: %s", *sent.Description)
 			}
 		}
 	} else if update.Message.HasSticker() { // sticker (has no caption)
@@ -507,7 +512,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 		if sent := b.SendSticker(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 			success = true
 		} else {
-			log.Printf("*** failed to send sticker back: %s", *sent.Description)
+			_stderr.Printf("failed to send sticker back: %s", *sent.Description)
 		}
 	} else if update.Message.HasVideo() { // video
 		fileID := update.Message.Video.FileID
@@ -532,7 +537,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			}
 
 			if sent := b.SendMessage(chatID, message, options); !sent.Ok {
-				log.Printf("*** failed to send message: %s", *sent.Description)
+				_stderr.Printf("failed to send message: %s", *sent.Description)
 			}
 		} else {
 			// send received file back immediately
@@ -540,7 +545,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			if sent := b.SendVideo(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 				success = true
 			} else {
-				log.Printf("*** failed to send video back: %s", *sent.Description)
+				_stderr.Printf("failed to send video back: %s", *sent.Description)
 			}
 
 		}
@@ -552,7 +557,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 		if sent := b.SendVoice(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
 			success = true
 		} else {
-			log.Printf("*** failed to send voice back: %s", *sent.Description)
+			_stderr.Printf("failed to send voice back: %s", *sent.Description)
 		}
 	}
 
@@ -603,7 +608,7 @@ func defaultOptions() map[string]interface{} {
 
 func main() {
 	// monitor queue
-	log.Printf("starting monitoring queue...")
+	_stdout.Printf("starting monitoring queue...")
 	go monitorQueue(
 		time.NewTicker(time.Duration(_monitorIntervalSeconds)*time.Second),
 		telegram,
@@ -611,16 +616,16 @@ func main() {
 
 	// get info about this bot
 	if me := telegram.GetMe(); me.Ok {
-		log.Printf("starting bot: @%s (%s)", *me.Result.Username, me.Result.FirstName)
+		_stdout.Printf("starting bot: @%s (%s)", *me.Result.Username, me.Result.FirstName)
 
 		// delete webhook (getting updates will not work when wehbook is set up)
 		if unhooked := telegram.DeleteWebhook(); unhooked.Ok {
 			// wait for new updates
 			telegram.StartMonitoringUpdates(0, _telegramIntervalSeconds, processUpdate)
 		} else {
-			panic("failed to delete webhook")
+			_stderr.Fatalf("failed to delete webhook")
 		}
 	} else {
-		panic("failed to get info of the bot")
+		_stderr.Fatalf("failed to get info of the bot")
 	}
 }
