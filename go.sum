@@ -2,6 +2,6 @@ github.com/mattn/go-sqlite3 v1.11.0 h1:LDdKkqtYlom37fkvqs8rMPFKAMe8+SgjbwZ6ex1/A
 github.com/mattn/go-sqlite3 v1.11.0/go.mod h1:FPy6KqzDD04eiIsT53CuJW3U88zkxoIYsOqkbpncsNc=
 github.com/meinside/lazy-korean-date-parser-go v0.1.0 h1:pNa6D2gmcyoxVNBE8cqVwFE5rGnnPLjGUtaQ4sri6Zg=
 github.com/meinside/lazy-korean-date-parser-go v0.1.0/go.mod h1:btf9ArXl0PytnVWiW1QjGNm86nxWbosk+cGZKvLzwf0=
-github.com/meinside/telegram-bot-go v0.0.16 h1:XEikHu2c+pYOpqRFhHAtZmPL+ZMmVhGBwBcd+Y0Ifo8=
-github.com/meinside/telegram-bot-go v0.0.16/go.mod h1:gS/BXucqjU9q4BX5W1OlsQ3BoOlJqGOTPvAG9+4+TsA=
-github.com/meinside/wasm-helper-go v0.0.4/go.mod h1:rrqb+xFboJK0/No8NAGkTTk1Y4qEUYHd4BFpUQ3g3wY=
+github.com/meinside/telegram-bot-go v0.0.17 h1:95eICPmnkH6iTSF2x8MvSemkt9rQagJ6S1hNVBSqhv0=
+github.com/meinside/telegram-bot-go v0.0.17/go.mod h1:ewucpWysa/qbRTuxeV94CqAEynHhpKucR13mVnoOXtc=
+github.com/meinside/wasm-helper-go v0.0.5/go.mod h1:Seqf/Sk8HL7TM8urkLx3IakDRFq2euF2ssa5j5V3onI=
