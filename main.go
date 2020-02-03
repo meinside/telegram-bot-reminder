@@ -299,7 +299,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 					if len(reminders) > 0 {
 						format := fmt.Sprintf("%s\n", messageListItemFormat)
 						for _, r := range reminders {
-							message += fmt.Sprintf(format, r.FireOn.Format(defaultDatetimeFormat), r.Message)
+							message += fmt.Sprintf(format, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)
 						}
 					} else {
 						message = messageNoReminders
@@ -310,7 +310,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						// inline keyboards
 						keys := make(map[string]string)
 						for _, r := range reminders {
-							keys[fmt.Sprintf(messageListItemFormat, r.FireOn.Format(defaultDatetimeFormat), r.Message)] = fmt.Sprintf("%s %d", commandCancel, r.ID)
+							keys[fmt.Sprintf(messageListItemFormat, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)] = fmt.Sprintf("%s %d", commandCancel, r.ID)
 						}
 						buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
 
@@ -339,7 +339,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						if db.Enqueue(chatID, update.Message.MessageID, txt, "", "", when) {
 							message = fmt.Sprintf(messageResponseFormat,
 								username,
-								when.Format(defaultDatetimeFormat),
+								when.In(_location).Format(defaultDatetimeFormat),
 								what,
 							)
 						} else {
@@ -443,7 +443,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"file",
-						when.Format(defaultDatetimeFormat),
+						when.In(_location).Format(defaultDatetimeFormat),
 					)
 				} else {
 					message = fmt.Sprintf(messageSaveFailedFormat, txt)
@@ -475,7 +475,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"audio",
-						when.Format(defaultDatetimeFormat),
+						when.In(_location).Format(defaultDatetimeFormat),
 					)
 
 					success = true
@@ -510,7 +510,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"image",
-						when.Format(defaultDatetimeFormat),
+						when.In(_location).Format(defaultDatetimeFormat),
 					)
 
 					success = true
@@ -557,7 +557,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"video",
-						when.Format(defaultDatetimeFormat),
+						when.In(_location).Format(defaultDatetimeFormat),
 					)
 
 					success = true
@@ -623,7 +623,7 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 		return when, what, nil
 	}
 
-	return time.Time{}, "", fmt.Errorf(when.Format(messageTimeIsPastFormat))
+	return time.Time{}, "", fmt.Errorf(when.In(_location).Format(messageTimeIsPastFormat))
 }
 
 // default message options
