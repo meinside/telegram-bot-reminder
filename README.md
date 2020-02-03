@@ -24,6 +24,26 @@ $ vi config.json
 
 **telegram_api_token** 값을 본인의 telegram bot api token으로 교체하여 사용할 것.
 
+### Oracle database 사용 시
+
+config.json에 다음의 Oracle database 설정을 추가:
+
+```json
+  ...
+
+  "oracle_db_config": {
+    "username": "oracle_username",
+    "password": "oracle_password1234",
+    "sid": "oracle_sid"
+  },
+
+  ...
+```
+
+### 기타
+
+별도의 설정이 따로 없을 시 SQLite database를 사용.
+
 ## run
 
 ### A. build and run
