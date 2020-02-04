@@ -50,55 +50,83 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 			db: db,
 		}
 
-		// create table: `PREFIX_logs`
-		if _, err := db.Exec(fmt.Sprintf(`create table %slogs(
-				id NUMBER GENERATED ALWAYS AS IDENTITY,
-				type NVARCHAR2(16) default null,
-				message NVARCHAR2(256) not null,
-				time DATE default sysdate not null
-			)`, tablePrefix)); err != nil {
-			log.Printf("(ignorable) failed to create table `%slogs`: %s", tablePrefix, err)
-		}
+		// check tables' existence
+		if stmt, err := db.Prepare(`select count(*) as cnt from all_objects
+			where object_type = 'TABLE' and
+				owner = upper(:1) and
+				object_name in (upper(:2), upper(:3))`); err != nil {
+			log.Printf("* failed to prepare a statement: %s", err)
+		} else {
+			defer stmt.Close()
 
-		// create table: `PREFIX_queue`
-		if _, err := db.Exec(fmt.Sprintf(`create table %squeue(
-				id NUMBER GENERATED ALWAYS AS IDENTITY,
-				chat_id NUMBER not null,
-				message_id NUMBER not null,
-				message NVARCHAR2(256) not null,
-				file_id NVARCHAR2(128) default '',
-				file_type NVARCHAR2(32) default '',
-				enqueued_on DATE default sysdate not null,
-				fire_on DATE not null,
-				delivered_on DATE default null,
-				num_tries NUMBER default 0
-			)`, tablePrefix)); err != nil {
-			log.Printf("(ignorable) failed to create table `%squeue`: %s", tablePrefix, err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`create index idx_queue1 on %squeue(
-				chat_id, delivered_on
-			)`, tablePrefix)); err != nil {
-			log.Printf("(ignorable) failed to create index `idx_queue1`: %s", err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`create index idx_queue2 on %squeue(
-				enqueued_on, delivered_on
-			)`, tablePrefix)); err != nil {
-			log.Printf("(ignorable) failed to create index `idx_queue2`: %s", err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`create index idx_queue3 on %squeue(
-				enqueued_on, delivered_on, num_tries
-			)`, tablePrefix)); err != nil {
-			log.Printf("(ignorable) failed to create index `idx_queue3`: %s", err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`create index idx_queue4 on %squeue(
-				chat_id, delivered_on, enqueued_on
-			)`, tablePrefix)); err != nil {
-			log.Printf("(ignorable) failed to create index `idx_queue4`: %s", err)
-		}
-		if _, err := db.Exec(fmt.Sprintf(`create index idx_queue5 on %squeue(
-				enqueued_on, delivered_on, num_tries, fire_on
-			)`, tablePrefix)); err != nil {
-			log.Printf("(ignorable) failed to create index `idx_queue5`: %s", err)
+			if rows, err := stmt.Query(id, fmt.Sprintf("%slogs", tablePrefix), fmt.Sprintf("%squeue", tablePrefix)); err != nil {
+				log.Printf("* failed to select table counts from oracle database: %s", err)
+			} else {
+				defer rows.Close()
+
+				var cnt int
+				for rows.Next() {
+					rows.Scan(&cnt)
+
+					// tables don't exist yet
+					if cnt != 2 {
+						// create table: `PREFIX_logs`
+						if _, err := db.Exec(fmt.Sprintf(`create table %slogs(
+							id NUMBER GENERATED ALWAYS AS IDENTITY,
+							type NVARCHAR2(16) default null,
+							message NVARCHAR2(256) not null,
+							time DATE default sysdate not null
+						)`, tablePrefix)); err != nil {
+							log.Printf("* failed to create table `%slogs`: %s", tablePrefix, err)
+						} else {
+							log.Printf("created table: '%slogs'", tablePrefix)
+						}
+
+						// create table: `PREFIX_queue`
+						if _, err := db.Exec(fmt.Sprintf(`create table %squeue(
+							id NUMBER GENERATED ALWAYS AS IDENTITY,
+							chat_id NUMBER not null,
+							message_id NUMBER not null,
+							message NVARCHAR2(256) not null,
+							file_id NVARCHAR2(128) default '',
+							file_type NVARCHAR2(32) default '',
+							enqueued_on DATE default sysdate not null,
+							fire_on DATE not null,
+							delivered_on DATE default null,
+							num_tries NUMBER default 0
+						)`, tablePrefix)); err != nil {
+							log.Printf("* failed to create table `%squeue`: %s", tablePrefix, err)
+						} else {
+							log.Printf("created table: '%squeue'", tablePrefix)
+						}
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue1 on %squeue(
+							chat_id, delivered_on
+						)`, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_queue1`: %s", err)
+						}
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue2 on %squeue(
+							enqueued_on, delivered_on
+						)`, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_queue2`: %s", err)
+						}
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue3 on %squeue(
+							enqueued_on, delivered_on, num_tries
+						)`, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_queue3`: %s", err)
+						}
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue4 on %squeue(
+							chat_id, delivered_on, enqueued_on
+						)`, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_queue4`: %s", err)
+						}
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue5 on %squeue(
+							enqueued_on, delivered_on, num_tries, fire_on
+						)`, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_queue5`: %s", err)
+						}
+					}
+				}
+			}
 		}
 	}
 
