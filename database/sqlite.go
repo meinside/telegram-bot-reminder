@@ -97,10 +97,12 @@ func (d *SQLiteDatabase) CloseDB() {
 	_sqlite = nil
 }
 
-func (d *SQLiteDatabase) saveLog(typ, msg string) {
+func (d *SQLiteDatabase) saveLog(typ, msg string) (err error) {
 	d.Lock()
+	defer d.Unlock()
 
-	if stmt, err := d.db.Prepare(`insert into logs(type, message) values(?, ?)`); err != nil {
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`insert into logs(type, message) values(?, ?)`); err != nil {
 		log.Printf("* failed to prepare a statement: %s", err)
 	} else {
 		defer stmt.Close()
@@ -109,31 +111,36 @@ func (d *SQLiteDatabase) saveLog(typ, msg string) {
 		}
 	}
 
-	d.Unlock()
+	return err
 }
 
 // Log logs a message
 func (d *SQLiteDatabase) Log(msg string) {
-	d.saveLog("log", msg)
+	if err := d.saveLog("log", msg); err != nil {
+		log.Printf("failed to save log message: %s", err)
+	}
 }
 
 // LogError logs an error message
 func (d *SQLiteDatabase) LogError(msg string) {
-	d.saveLog("err", msg)
+	if err := d.saveLog("err", msg); err != nil {
+		log.Printf("failed to save error message: %s", err)
+	}
 }
 
 // GetLogs fetches `latestN` number of latest logs
-func (d *SQLiteDatabase) GetLogs(latestN int) []Log {
-	logs := []Log{}
-
+func (d *SQLiteDatabase) GetLogs(latestN int) (logs []Log, err error) {
 	d.RLock()
+	defer d.RUnlock()
 
-	if stmt, err := d.db.Prepare(`select type, message, time from logs order by id desc limit ?`); err != nil {
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`select type, message, time from logs order by id desc limit ?`); err != nil {
 		log.Printf("* failed to prepare a statement: %s", err)
 	} else {
 		defer stmt.Close()
 
-		if rows, err := stmt.Query(latestN); err != nil {
+		var rows *sql.Rows
+		if rows, err = stmt.Query(latestN); err != nil {
 			log.Printf("* failed to select logs from local database: %s", err)
 		} else {
 			defer rows.Close()
@@ -152,18 +159,16 @@ func (d *SQLiteDatabase) GetLogs(latestN int) []Log {
 		}
 	}
 
-	d.RUnlock()
-
-	return logs
+	return logs, err
 }
 
 // Enqueue enques given message
-func (d *SQLiteDatabase) Enqueue(chatID int64, messageID int, message, fileID string, fileType FileType, fireOn time.Time) bool {
-	result := false
-
+func (d *SQLiteDatabase) Enqueue(chatID int64, messageID int, message, fileID string, fileType FileType, fireOn time.Time) (result bool, err error) {
 	d.Lock()
+	defer d.Unlock()
 
-	if stmt, err := d.db.Prepare(`insert or ignore into queue(chat_id, message_id, message, file_id, file_type, fire_on) values(?, ?, ?, ?, ?, ?)`); err != nil {
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`insert or ignore into queue(chat_id, message_id, message, file_id, file_type, fire_on) values(?, ?, ?, ?, ?, ?)`); err != nil {
 		log.Printf("* failed to prepare a statement: %s", err)
 	} else {
 		defer stmt.Close()
@@ -175,21 +180,20 @@ func (d *SQLiteDatabase) Enqueue(chatID int64, messageID int, message, fileID st
 		}
 	}
 
-	d.Unlock()
-
-	return result
+	return result, err
 }
 
 // DeliverableQueueItems fetches all items from the queue which need to be delivered right now.
-func (d *SQLiteDatabase) DeliverableQueueItems(maxNumTries int) []QueueItem {
-	queue := []QueueItem{}
+func (d *SQLiteDatabase) DeliverableQueueItems(maxNumTries int) (queue []QueueItem, err error) {
 	if maxNumTries <= 0 {
 		maxNumTries = DefaultMaxNumTries
 	}
 
 	d.RLock()
+	defer d.RUnlock()
 
-	if stmt, err := d.db.Prepare(`select 
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`select 
 		id,
 		chat_id, 
 		message_id,
@@ -206,7 +210,8 @@ func (d *SQLiteDatabase) DeliverableQueueItems(maxNumTries int) []QueueItem {
 	} else {
 		defer stmt.Close()
 
-		if rows, err := stmt.Query(maxNumTries, time.Now().Unix()); err != nil {
+		var rows *sql.Rows
+		if rows, err = stmt.Query(maxNumTries, time.Now().Unix()); err != nil {
 			log.Printf("* failed to select queue items from local database: %s", err)
 		} else {
 			defer rows.Close()
@@ -234,18 +239,16 @@ func (d *SQLiteDatabase) DeliverableQueueItems(maxNumTries int) []QueueItem {
 		}
 	}
 
-	d.RUnlock()
-
-	return queue
+	return queue, err
 }
 
 // UndeliveredQueueItems fetches all undelivered items from the queue.
-func (d *SQLiteDatabase) UndeliveredQueueItems(chatID int64) []QueueItem {
-	queue := []QueueItem{}
-
+func (d *SQLiteDatabase) UndeliveredQueueItems(chatID int64) (queue []QueueItem, err error) {
 	d.RLock()
+	defer d.RUnlock()
 
-	if stmt, err := d.db.Prepare(`select 
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`select 
 		id,
 		chat_id, 
 		message_id,
@@ -262,7 +265,8 @@ func (d *SQLiteDatabase) UndeliveredQueueItems(chatID int64) []QueueItem {
 	} else {
 		defer stmt.Close()
 
-		if rows, err := stmt.Query(chatID); err != nil {
+		var rows *sql.Rows
+		if rows, err = stmt.Query(chatID); err != nil {
 			log.Printf("* failed to select queue items from local database: %s", err)
 		} else {
 			defer rows.Close()
@@ -290,19 +294,15 @@ func (d *SQLiteDatabase) UndeliveredQueueItems(chatID int64) []QueueItem {
 		}
 	}
 
-	d.RUnlock()
-
-	return queue
+	return queue, err
 }
 
 // GetQueueItem fetches a queue item
-func (d *SQLiteDatabase) GetQueueItem(chatID, queueID int64) (QueueItem, error) {
+func (d *SQLiteDatabase) GetQueueItem(chatID, queueID int64) (queueItem QueueItem, err error) {
 	d.RLock()
 	defer d.RUnlock()
 
 	var stmt *sql.Stmt
-	var err error = nil
-
 	if stmt, err = d.db.Prepare(`select 
 		id,
 		chat_id, 
@@ -356,15 +356,16 @@ func (d *SQLiteDatabase) GetQueueItem(chatID, queueID int64) (QueueItem, error) 
 }
 
 // DeleteQueueItem deletes a queue item
-func (d *SQLiteDatabase) DeleteQueueItem(chatID, queueID int64) bool {
-	result := false
-
+func (d *SQLiteDatabase) DeleteQueueItem(chatID, queueID int64) (result bool, err error) {
 	d.Lock()
+	defer d.Unlock()
 
-	if stmt, err := d.db.Prepare(`delete from queue where id = ? and chat_id = ?`); err != nil {
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`delete from queue where id = ? and chat_id = ?`); err != nil {
 		log.Printf("* failed to prepare a statement: %s", err)
 	} else {
 		defer stmt.Close()
+
 		if _, err = stmt.Exec(queueID, chatID); err != nil {
 			log.Printf("* failed to delete queue item from local database: %s", err)
 		} else {
@@ -372,18 +373,16 @@ func (d *SQLiteDatabase) DeleteQueueItem(chatID, queueID int64) bool {
 		}
 	}
 
-	d.Unlock()
-
-	return result
+	return result, err
 }
 
 // IncreaseNumTries increases the number of tries of a queue item
-func (d *SQLiteDatabase) IncreaseNumTries(chatID, queueID int64) bool {
-	result := false
-
+func (d *SQLiteDatabase) IncreaseNumTries(chatID, queueID int64) (result bool, err error) {
 	d.Lock()
+	defer d.Unlock()
 
-	if stmt, err := d.db.Prepare(`update queue set num_tries = num_tries + 1 where id = ? and chat_id = ?`); err != nil {
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`update queue set num_tries = num_tries + 1 where id = ? and chat_id = ?`); err != nil {
 		log.Printf("* failed to prepare a statement: %s", err)
 	} else {
 		defer stmt.Close()
@@ -400,18 +399,16 @@ func (d *SQLiteDatabase) IncreaseNumTries(chatID, queueID int64) bool {
 		}
 	}
 
-	d.Unlock()
-
-	return result
+	return result, err
 }
 
 // MarkQueueItemAsDelivered makes a queue item as delivered
-func (d *SQLiteDatabase) MarkQueueItemAsDelivered(chatID, queueID int64) bool {
-	result := false
-
+func (d *SQLiteDatabase) MarkQueueItemAsDelivered(chatID, queueID int64) (result bool, err error) {
 	d.Lock()
+	defer d.Unlock()
 
-	if stmt, err := d.db.Prepare(`update queue set delivered_on = ? where id = ? and chat_id = ?`); err != nil {
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`update queue set delivered_on = ? where id = ? and chat_id = ?`); err != nil {
 		log.Printf("* failed to prepare a statement: %s", err)
 	} else {
 		defer stmt.Close()
@@ -430,7 +427,5 @@ func (d *SQLiteDatabase) MarkQueueItemAsDelivered(chatID, queueID int64) bool {
 		}
 	}
 
-	d.Unlock()
-
-	return result
+	return result, err
 }

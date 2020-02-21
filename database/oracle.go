@@ -133,9 +133,11 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 	return _oracle, nil
 }
 
-func (d *OracleDatabase) saveLog(typ, msg string) {
-	if tx, err := d.db.Begin(); err == nil {
-		if stmt, err := d.db.Prepare(fmt.Sprintf(`insert into %slogs(type, message) values(:1, :2)`, tablePrefix)); err != nil {
+func (d *OracleDatabase) saveLog(typ, msg string) (err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`insert into %slogs(type, message) values(:1, :2)`, tablePrefix)); err != nil {
 			log.Printf("* failed to prepare a statement: %s", err)
 		} else {
 			defer stmt.Close()
@@ -149,24 +151,30 @@ func (d *OracleDatabase) saveLog(typ, msg string) {
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
+
+	return err
 }
 
 // Log logs a message
 func (d *OracleDatabase) Log(msg string) {
-	d.saveLog("log", msg)
+	if err := d.saveLog("log", msg); err != nil {
+		log.Printf("failed to save log message: %s", err)
+	}
 }
 
 // LogError logs an error message
 func (d *OracleDatabase) LogError(msg string) {
-	d.saveLog("err", msg)
+	if err := d.saveLog("err", msg); err != nil {
+		log.Printf("failed to save error message: %s", err)
+	}
 }
 
 // GetLogs fetches `latestN` number of latest logs
-func (d *OracleDatabase) GetLogs(latestN int) []Log {
-	logs := []Log{}
-
-	if tx, err := d.db.Begin(); err == nil {
-		if stmt, err := d.db.Prepare(fmt.Sprintf(`select type, message, time from %slogs order by id desc limit :1`, tablePrefix)); err != nil {
+func (d *OracleDatabase) GetLogs(latestN int) (logs []Log, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`select type, message, time from %slogs order by id desc limit :1`, tablePrefix)); err != nil {
 			log.Printf("* failed to prepare a statement: %s", err)
 		} else {
 			defer stmt.Close()
@@ -195,15 +203,15 @@ func (d *OracleDatabase) GetLogs(latestN int) []Log {
 		log.Printf("failed to begin transaction: %s", err)
 	}
 
-	return logs
+	return logs, err
 }
 
 // Enqueue enques given message
-func (d *OracleDatabase) Enqueue(chatID int64, messageID int, message, fileID string, fileType FileType, fireOn time.Time) bool {
-	result := false
-
-	if tx, err := d.db.Begin(); err == nil {
-		if stmt, err := d.db.Prepare(fmt.Sprintf(`insert into %squeue(chat_id, message_id, message, file_id, file_type, fire_on) values(:1, :2, :3, :4, :5, :6)`, tablePrefix)); err != nil {
+func (d *OracleDatabase) Enqueue(chatID int64, messageID int, message, fileID string, fileType FileType, fireOn time.Time) (result bool, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`insert into %squeue(chat_id, message_id, message, file_id, file_type, fire_on) values(:1, :2, :3, :4, :5, :6)`, tablePrefix)); err != nil {
 			log.Printf("* failed to prepare a statement: %s", err)
 		} else {
 			defer stmt.Close()
@@ -220,18 +228,19 @@ func (d *OracleDatabase) Enqueue(chatID int64, messageID int, message, fileID st
 		log.Printf("failed to begin transaction: %s", err)
 	}
 
-	return result
+	return result, err
 }
 
 // DeliverableQueueItems fetches all items from the queue which need to be delivered right now.
-func (d *OracleDatabase) DeliverableQueueItems(maxNumTries int) []QueueItem {
-	queue := []QueueItem{}
+func (d *OracleDatabase) DeliverableQueueItems(maxNumTries int) (queue []QueueItem, err error) {
 	if maxNumTries <= 0 {
 		maxNumTries = DefaultMaxNumTries
 	}
 
-	if tx, err := d.db.Begin(); err == nil {
-		if stmt, err := d.db.Prepare(fmt.Sprintf(`select 
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`select 
 			id,
 			chat_id, 
 			message_id,
@@ -248,7 +257,8 @@ func (d *OracleDatabase) DeliverableQueueItems(maxNumTries int) []QueueItem {
 		} else {
 			defer stmt.Close()
 
-			if rows, err := stmt.Query(maxNumTries, time.Now()); err != nil {
+			var rows *sql.Rows
+			if rows, err = stmt.Query(maxNumTries, time.Now()); err != nil {
 				log.Printf("* failed to select queue items from oracle database: %s", err)
 			} else {
 				defer rows.Close()
@@ -281,15 +291,15 @@ func (d *OracleDatabase) DeliverableQueueItems(maxNumTries int) []QueueItem {
 		log.Printf("failed to begin transaction: %s", err)
 	}
 
-	return queue
+	return queue, err
 }
 
 // UndeliveredQueueItems fetches all undelivered items from the queue.
-func (d *OracleDatabase) UndeliveredQueueItems(chatID int64) []QueueItem {
-	queue := []QueueItem{}
-
-	if tx, err := d.db.Begin(); err == nil {
-		if stmt, err := d.db.Prepare(fmt.Sprintf(`select 
+func (d *OracleDatabase) UndeliveredQueueItems(chatID int64) (queue []QueueItem, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`select 
 			id,
 			chat_id, 
 			message_id,
@@ -306,7 +316,8 @@ func (d *OracleDatabase) UndeliveredQueueItems(chatID int64) []QueueItem {
 		} else {
 			defer stmt.Close()
 
-			if rows, err := stmt.Query(chatID); err != nil {
+			var rows *sql.Rows
+			if rows, err = stmt.Query(chatID); err != nil {
 				log.Printf("* failed to select queue items from oracle database: %s", err)
 			} else {
 				defer rows.Close()
@@ -339,16 +350,14 @@ func (d *OracleDatabase) UndeliveredQueueItems(chatID int64) []QueueItem {
 		log.Printf("failed to begin transaction: %s", err)
 	}
 
-	return queue
+	return queue, err
 }
 
 // GetQueueItem fetches a queue item
-func (d *OracleDatabase) GetQueueItem(chatID, queueID int64) (QueueItem, error) {
-	var err error = nil
-
-	if tx, err := d.db.Begin(); err == nil {
+func (d *OracleDatabase) GetQueueItem(chatID, queueID int64) (queueItem QueueItem, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
 		var stmt *sql.Stmt
-
 		if stmt, err = d.db.Prepare(fmt.Sprintf(`select 
 			id,
 			chat_id, 
@@ -407,11 +416,11 @@ func (d *OracleDatabase) GetQueueItem(chatID, queueID int64) (QueueItem, error) 
 }
 
 // DeleteQueueItem deletes a queue item
-func (d *OracleDatabase) DeleteQueueItem(chatID, queueID int64) bool {
-	result := false
-
-	if tx, err := d.db.Begin(); err == nil {
-		if stmt, err := d.db.Prepare(fmt.Sprintf(`delete from %squeue where id = :1 and chat_id = :2`, tablePrefix)); err != nil {
+func (d *OracleDatabase) DeleteQueueItem(chatID, queueID int64) (result bool, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`delete from %squeue where id = :1 and chat_id = :2`, tablePrefix)); err != nil {
 			log.Printf("* failed to prepare a statement: %s", err)
 		} else {
 			defer stmt.Close()
@@ -429,15 +438,15 @@ func (d *OracleDatabase) DeleteQueueItem(chatID, queueID int64) bool {
 
 	}
 
-	return result
+	return result, err
 }
 
 // IncreaseNumTries increases the number of tries of a queue item
-func (d *OracleDatabase) IncreaseNumTries(chatID, queueID int64) bool {
-	result := false
-
-	if tx, err := d.db.Begin(); err == nil {
-		if stmt, err := d.db.Prepare(fmt.Sprintf(`update %squeue set num_tries = num_tries + 1 where id = :1 and chat_id = :2`, tablePrefix)); err != nil {
+func (d *OracleDatabase) IncreaseNumTries(chatID, queueID int64) (result bool, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`update %squeue set num_tries = num_tries + 1 where id = :1 and chat_id = :2`, tablePrefix)); err != nil {
 			log.Printf("* failed to prepare a statement: %s", err)
 		} else {
 			defer stmt.Close()
@@ -459,15 +468,15 @@ func (d *OracleDatabase) IncreaseNumTries(chatID, queueID int64) bool {
 		log.Printf("failed to begin transaction: %s", err)
 	}
 
-	return result
+	return result, err
 }
 
 // MarkQueueItemAsDelivered makes a queue item as delivered
-func (d *OracleDatabase) MarkQueueItemAsDelivered(chatID, queueID int64) bool {
-	result := false
-
-	if tx, err := d.db.Begin(); err == nil {
-		if stmt, err := d.db.Prepare(fmt.Sprintf(`update %squeue set delivered_on = :1 where id = :2 and chat_id = :3`, tablePrefix)); err != nil {
+func (d *OracleDatabase) MarkQueueItemAsDelivered(chatID, queueID int64) (result bool, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`update %squeue set delivered_on = :1 where id = :2 and chat_id = :3`, tablePrefix)); err != nil {
 			log.Printf("* failed to prepare a statement: %s", err)
 		} else {
 			defer stmt.Close()
@@ -491,5 +500,5 @@ func (d *OracleDatabase) MarkQueueItemAsDelivered(chatID, queueID int64) bool {
 		log.Printf("failed to begin transaction: %s", err)
 	}
 
-	return result
+	return result, err
 }
