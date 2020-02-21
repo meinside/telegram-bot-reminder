@@ -32,10 +32,10 @@ const (
 	messageReminderCanceledFormat = "알림이 취소 되었습니다: %s"
 	messageError                  = "오류가 발생했습니다."
 	messageNoReminders            = "예약된 알림이 없습니다."
-	messageNoDateTime             = "날짜 또는 시간이 없습니다."
+	messageNoDateTime             = "날짜 또는 시간이 없습니다: %s"
 	messageListItemFormat         = "☑ %s; %s"
 	messageResponseFormat         = `@%s님에게 %s에 "%s" 알림 예정입니다.`
-	messageSaveFailedFormat       = "알림 저장을 실패 했습니다: %s"
+	messageSaveFailedFormat       = "알림 저장을 실패 했습니다: %s (%s)"
 	messageParseFailedFormat      = "메시지를 이해하지 못했습니다: %s"
 	messageCancelWhat             = "어떤 알림을 취소하시겠습니까?"
 	messageTimeIsPastFormat       = "2006.01.02 15:04는 이미 지난 시각입니다"
@@ -97,28 +97,30 @@ type config struct {
 var _stdout = log.New(os.Stdout, "", log.LstdFlags)
 var _stderr = log.New(os.Stderr, "", log.LstdFlags)
 
-// database interface
+// DatabaseInterface for interfacing databases (sqlite, oracle, ...)
 type DatabaseInterface interface {
 	Log(msg string)
 	LogError(msg string)
-	GetLogs(latestN int) []database.Log
-	Enqueue(chatID int64, messageID int, message, fileID string, fileType database.FileType, fireOn time.Time) bool
-	DeliverableQueueItems(maxNumTries int) []database.QueueItem
-	UndeliveredQueueItems(chatID int64) []database.QueueItem
+	GetLogs(latestN int) ([]database.Log, error)
+	Enqueue(chatID int64, messageID int, message, fileID string, fileType database.FileType, fireOn time.Time) (bool, error)
+	DeliverableQueueItems(maxNumTries int) ([]database.QueueItem, error)
+	UndeliveredQueueItems(chatID int64) ([]database.QueueItem, error)
 	GetQueueItem(chatID, queueID int64) (database.QueueItem, error)
-	DeleteQueueItem(chatID, queueID int64) bool
-	IncreaseNumTries(chatID, queueID int64) bool
-	MarkQueueItemAsDelivered(chatID, queueID int64) bool
+	DeleteQueueItem(chatID, queueID int64) (bool, error)
+	IncreaseNumTries(chatID, queueID int64) (bool, error)
+	MarkQueueItemAsDelivered(chatID, queueID int64) (bool, error)
 }
 
 var db DatabaseInterface
 
 func pwd() string {
-	if execPath, err := os.Executable(); err == nil {
+	var execPath string
+	var err error
+	if execPath, err = os.Executable(); err == nil {
 		return filepath.Dir(execPath)
-	} else {
-		_stderr.Printf("failed to get executable path: %s", err)
 	}
+
+	_stderr.Printf("failed to get executable path: %s", err)
 
 	return "." // fallback to 'current directory'
 }
@@ -213,60 +215,62 @@ func monitorQueue(monitor *time.Ticker, client *bot.Bot) {
 }
 
 func processQueue(client *bot.Bot) {
-	queue := db.DeliverableQueueItems(_maxNumTries)
+	if queue, err := db.DeliverableQueueItems(_maxNumTries); err == nil {
+		if _isVerbose {
+			_stdout.Printf("checking queue: %d items...", len(queue))
+		}
 
-	if _isVerbose {
-		_stdout.Printf("checking queue: %d items...", len(queue))
-	}
+		for _, q := range queue {
+			go func(q database.QueueItem) {
+				message := fmt.Sprintf("%s", q.Message)
 
-	for _, q := range queue {
-		go func(q database.QueueItem) {
-			message := fmt.Sprintf("%s", q.Message)
+				options := defaultOptions()
+				options["reply_to_message_id"] = q.MessageID // show original message
 
-			options := defaultOptions()
-			options["reply_to_message_id"] = q.MessageID // show original message
+				var sent bot.APIResponseMessage
 
-			var sent bot.APIResponseMessage
-
-			// if it is a message with a file,
-			if q.FileID != "" && q.FileType != "" {
-				switch q.FileType {
-				case database.FileTypeDocument:
-					options["caption"] = message
-					sent = client.SendDocument(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
-				case database.FileTypeAudio:
-					options["caption"] = message
-					sent = client.SendAudio(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
-				case database.FileTypePhoto:
-					options["caption"] = message
-					sent = client.SendPhoto(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
-				case database.FileTypeSticker:
-					sent = client.SendSticker(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
-				case database.FileTypeVideo:
-					options["caption"] = message
-					sent = client.SendVideo(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
-				case database.FileTypeVoice:
-					sent = client.SendVoice(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+				// if it is a message with a file,
+				if q.FileID != "" && q.FileType != "" {
+					switch q.FileType {
+					case database.FileTypeDocument:
+						options["caption"] = message
+						sent = client.SendDocument(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+					case database.FileTypeAudio:
+						options["caption"] = message
+						sent = client.SendAudio(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+					case database.FileTypePhoto:
+						options["caption"] = message
+						sent = client.SendPhoto(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+					case database.FileTypeSticker:
+						sent = client.SendSticker(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+					case database.FileTypeVideo:
+						options["caption"] = message
+						sent = client.SendVideo(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+					case database.FileTypeVoice:
+						sent = client.SendVoice(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+					}
+				} else {
+					// if it is just a message,
+					sent = client.SendMessage(q.ChatID, message, options)
 				}
-			} else {
-				// if it is just a message,
-				sent = client.SendMessage(q.ChatID, message, options)
-			}
 
-			if sent.Ok {
-				// mark as delivered
-				if !db.MarkQueueItemAsDelivered(q.ChatID, q.ID) {
-					_stderr.Printf("failed to mark chat id: %d, queue id: %d", q.ChatID, q.ID)
+				if sent.Ok {
+					// mark as delivered
+					if _, err := db.MarkQueueItemAsDelivered(q.ChatID, q.ID); err != nil {
+						_stderr.Printf("failed to mark chat id: %d, queue id: %d (%s)", q.ChatID, q.ID, err)
+					}
+				} else {
+					_stderr.Printf("failed to send reminder: %s", *sent.Description)
 				}
-			} else {
-				_stderr.Printf("failed to send reminder: %s", *sent.Description)
-			}
 
-			// increase num tries
-			if !db.IncreaseNumTries(q.ChatID, q.ID) {
-				_stderr.Printf("failed to increase num tries for chat id: %d, queue id: %d", q.ChatID, q.ID)
-			}
-		}(q)
+				// increase num tries
+				if _, err := db.IncreaseNumTries(q.ChatID, q.ID); err != nil {
+					_stderr.Printf("failed to increase num tries for chat id: %d, queue id: %d (%s)", q.ChatID, q.ID, err)
+				}
+			}(q)
+		}
+	} else {
+		_stderr.Printf("failed to process queue: %s", err)
 	}
 }
 
@@ -295,55 +299,61 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				if strings.HasPrefix(txt, commandStart) { // /start
 					message = messageUsage
 				} else if strings.HasPrefix(txt, commandListReminders) {
-					reminders := db.UndeliveredQueueItems(chatID)
-					if len(reminders) > 0 {
-						format := fmt.Sprintf("%s\n", messageListItemFormat)
-						for _, r := range reminders {
-							message += fmt.Sprintf(format, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)
+					if reminders, err := db.UndeliveredQueueItems(chatID); err == nil {
+						if len(reminders) > 0 {
+							format := fmt.Sprintf("%s\n", messageListItemFormat)
+							for _, r := range reminders {
+								message += fmt.Sprintf(format, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)
+							}
+						} else {
+							message = messageNoReminders
 						}
 					} else {
-						message = messageNoReminders
+						_stderr.Printf("failed to process %s: %s", commandListReminders, err)
 					}
 				} else if strings.HasPrefix(txt, commandCancel) {
-					reminders := db.UndeliveredQueueItems(chatID)
-					if len(reminders) > 0 {
-						// inline keyboards
-						keys := make(map[string]string)
-						for _, r := range reminders {
-							keys[fmt.Sprintf(messageListItemFormat, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)] = fmt.Sprintf("%s %d", commandCancel, r.ID)
+					if reminders, err := db.UndeliveredQueueItems(chatID); err == nil {
+						if len(reminders) > 0 {
+							// inline keyboards
+							keys := make(map[string]string)
+							for _, r := range reminders {
+								keys[fmt.Sprintf(messageListItemFormat, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)] = fmt.Sprintf("%s %d", commandCancel, r.ID)
+							}
+							buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
+
+							// add a cancel button for canceling reminder
+							cancel := commandCancel
+							buttons = append(buttons, []bot.InlineKeyboardButton{
+								bot.InlineKeyboardButton{
+									Text:         messageCancel,
+									CallbackData: &cancel,
+								},
+							})
+
+							// options
+							options["reply_markup"] = bot.InlineKeyboardMarkup{
+								InlineKeyboard: buttons,
+							}
+
+							message = messageCancelWhat
+						} else {
+							message = messageNoReminders
 						}
-						buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
-
-						// add a cancel button for canceling reminder
-						cancel := commandCancel
-						buttons = append(buttons, []bot.InlineKeyboardButton{
-							bot.InlineKeyboardButton{
-								Text:         messageCancel,
-								CallbackData: &cancel,
-							},
-						})
-
-						// options
-						options["reply_markup"] = bot.InlineKeyboardMarkup{
-							InlineKeyboard: buttons,
-						}
-
-						message = messageCancelWhat
 					} else {
-						message = messageNoReminders
+						_stderr.Printf("failed to process %s: %s", commandCancel, err)
 					}
 				} else if strings.HasPrefix(txt, commandHelp) {
 					message = messageUsage
 				} else {
 					if when, what, err := parseMessage(txt); err == nil {
-						if db.Enqueue(chatID, update.Message.MessageID, txt, "", "", when) {
+						if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, "", "", when); err == nil {
 							message = fmt.Sprintf(messageResponseFormat,
 								username,
 								when.In(_location).Format(defaultDatetimeFormat),
 								what,
 							)
 						} else {
-							message = fmt.Sprintf(messageSaveFailedFormat, txt)
+							message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 						}
 					} else {
 						message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -385,10 +395,10 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 			cancelParam := strings.TrimSpace(strings.Replace(txt, commandCancel, "", 1))
 			if queueID, err := strconv.Atoi(cancelParam); err == nil {
 				if item, err := db.GetQueueItem(query.Message.Chat.ID, int64(queueID)); err == nil {
-					if db.DeleteQueueItem(query.Message.Chat.ID, int64(queueID)) {
+					if _, err := db.DeleteQueueItem(query.Message.Chat.ID, int64(queueID)); err == nil {
 						message = fmt.Sprintf(messageReminderCanceledFormat, item.Message)
 					} else {
-						_stderr.Printf("failed to delete reminder")
+						_stderr.Printf("failed to delete reminder: %s", err)
 					}
 				} else {
 					_stderr.Printf("failed to get reminder: %s", err)
@@ -439,14 +449,14 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			txt := *update.Message.Caption
 			if when, _, err := parseMessage(txt); err == nil {
 				// enqueue received file
-				if db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeDocument, when) {
+				if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeDocument, when); err == nil {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"file",
 						when.In(_location).Format(defaultDatetimeFormat),
 					)
 				} else {
-					message = fmt.Sprintf(messageSaveFailedFormat, txt)
+					message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 				}
 			} else {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -471,7 +481,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			txt := *update.Message.Caption
 			if when, _, err := parseMessage(txt); err == nil {
 				// enqueue received file
-				if db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeAudio, when) {
+				if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeAudio, when); err == nil {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"audio",
@@ -480,7 +490,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 
 					success = true
 				} else {
-					message = fmt.Sprintf(messageSaveFailedFormat, txt)
+					message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 				}
 			} else {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -506,7 +516,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 				fileID := photo.FileID
 
 				// enqueue received file
-				if db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypePhoto, when) {
+				if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypePhoto, when); err == nil {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"image",
@@ -515,7 +525,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 
 					success = true
 				} else {
-					message = fmt.Sprintf(messageSaveFailedFormat, txt)
+					message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 				}
 			} else {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -553,7 +563,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			txt := *update.Message.Caption
 			if when, _, err := parseMessage(txt); err == nil {
 				// enqueue received file
-				if db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeVideo, when) {
+				if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeVideo, when); err == nil {
 					message = fmt.Sprintf(messageWillSendBackFileFormat,
 						username,
 						"video",
@@ -562,7 +572,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 
 					success = true
 				} else {
-					message = fmt.Sprintf(messageSaveFailedFormat, txt)
+					message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 				}
 			} else {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -615,7 +625,7 @@ func parseMessage(message string) (when time.Time, what string, err error) {
 				when = when.Add(time.Duration(daysChanged*24) * time.Hour)
 			}
 		} else {
-			return time.Time{}, "", fmt.Errorf(messageNoDateTime)
+			return time.Time{}, "", fmt.Errorf(messageNoDateTime, message)
 		}
 	}
 
