@@ -43,6 +43,24 @@ func OpenSQLiteDB(filepath string) (*SQLiteDatabase, error) {
 			return nil, fmt.Errorf("failed to create logs table: %s", err)
 		}
 
+		// temporary messages table
+		if _, err = db.Exec(`create table if not exists temp_messages(
+				id integer primary key autoincrement,
+				chat_id integer not null,
+				message_id integer not null,
+				message text not null,
+				file_id text default '',
+				file_type text default '',
+				saved_on integer default (strftime('%s', 'now'))
+			)`); err != nil {
+			return nil, fmt.Errorf("failed to create temp_messages table: %s", err)
+		}
+		if _, err = db.Exec(`create index if not exists idx_temp_messages1 on temp_messages(
+				chat_id, message_id
+			)`); err != nil {
+			return nil, fmt.Errorf("failed to create index idx_temp_messages1: %s", err)
+		}
+
 		// queue table
 		if _, err = db.Exec(`create table if not exists queue(
 				id integer primary key autoincrement,
@@ -160,6 +178,100 @@ func (d *SQLiteDatabase) GetLogs(latestN int) (logs []Log, err error) {
 	}
 
 	return logs, err
+}
+
+// SaveTemporaryMessage saves a temporary message
+func (d *SQLiteDatabase) SaveTemporaryMessage(chatID int64, messageID int, message, fileID string, fileType FileType) (result bool, err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`insert or ignore into temp_messages(chat_id, message_id, message, file_id, file_type) values(?, ?, ?, ?, ?)`); err != nil {
+		log.Printf("* failed to prepare a statement: %s", err)
+	} else {
+		defer stmt.Close()
+
+		if _, err = stmt.Exec(chatID, messageID, message, fileID, fileType); err != nil {
+			log.Printf("* failed to save temporary message into local database: %s", err)
+		} else {
+			result = true
+		}
+	}
+
+	return result, err
+}
+
+// LoadTemporaryMessage retrieves a temporary message
+func (d *SQLiteDatabase) LoadTemporaryMessage(chatID int64, messageID int) (result TemporaryMessage, err error) {
+	d.RLock()
+	defer d.RUnlock()
+
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`select 
+		id,
+		chat_id, 
+		message_id,
+		message, 
+		file_id,
+		file_type,
+		ifnull(saved_on, 0) as saved_on
+		from temp_messages
+		where chat_id = ? and message_id = ?`); err != nil {
+		log.Printf("* failed to prepare a statement: %s", err)
+	} else {
+		defer stmt.Close()
+
+		var rows *sql.Rows
+		if rows, err = stmt.Query(chatID, messageID); err != nil {
+			log.Printf("* failed to select temporary message from local database: %s", err)
+		} else {
+			defer rows.Close()
+
+			var id, chatID int64
+			var messageID int
+			var message, fileID string
+			var fileType FileType
+			var savedOn int64
+			if rows.Next() {
+				rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &savedOn)
+
+				result = TemporaryMessage{
+					ID:        id,
+					ChatID:    chatID,
+					MessageID: messageID,
+					Message:   message,
+					FileID:    fileID,
+					FileType:  fileType,
+					SavedOn:   time.Unix(savedOn, 0),
+				}
+			} else {
+				err = fmt.Errorf("no temporary message for chat id = %d, message id = %d", chatID, messageID)
+			}
+		}
+	}
+
+	return result, err
+}
+
+// DeleteTemporaryMessage deletes given temporary message
+func (d *SQLiteDatabase) DeleteTemporaryMessage(chatID int64, messageID int) (result bool, err error) {
+	d.Lock()
+	defer d.Unlock()
+
+	var stmt *sql.Stmt
+	if stmt, err = d.db.Prepare(`delete from temp_messages where chat_id = ? and message_id = ?`); err != nil {
+		log.Printf("* failed to prepare a statement: %s", err)
+	} else {
+		defer stmt.Close()
+
+		if _, err = stmt.Exec(chatID, messageID); err != nil {
+			log.Printf("* failed to delete temporary message from local database: %s", err)
+		} else {
+			result = true
+		}
+	}
+
+	return result, err
 }
 
 // Enqueue enques given message

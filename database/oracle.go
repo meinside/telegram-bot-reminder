@@ -59,7 +59,7 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 		} else {
 			defer stmt.Close()
 
-			if rows, err := stmt.Query(id, fmt.Sprintf("%slogs", tablePrefix), fmt.Sprintf("%squeue", tablePrefix)); err != nil {
+			if rows, err := stmt.Query(id, fmt.Sprintf("%slogs", tablePrefix), fmt.Sprintf("%stemp_messages", tablePrefix), fmt.Sprintf("%squeue", tablePrefix)); err != nil {
 				log.Printf("* failed to select table counts from oracle database: %s", err)
 			} else {
 				defer rows.Close()
@@ -69,7 +69,7 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 					rows.Scan(&cnt)
 
 					// tables don't exist yet
-					if cnt != 2 {
+					if cnt != 3 {
 						// create table: `PREFIX_logs`
 						if _, err := db.Exec(fmt.Sprintf(`create table %slogs(
 							id NUMBER GENERATED ALWAYS AS IDENTITY,
@@ -80,6 +80,26 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 							log.Printf("* failed to create table `%slogs`: %s", tablePrefix, err)
 						} else {
 							log.Printf("created table: '%slogs'", tablePrefix)
+						}
+
+						// create table: `PREFIX_temp_messages`
+						if _, err := db.Exec(fmt.Sprintf(`create table %stemp_messages(
+							id NUMBER GENERATED ALWAYS AS IDENTITY,
+							chat_id NUMBER not null,
+							message_id NUMBER not null,
+							message NVARCHAR2(256) not null,
+							file_id NVARCHAR2(128) default '',
+							file_type NVARCHAR2(32) default '',
+							saved_on DATE default sysdate not null
+						)`, tablePrefix)); err != nil {
+							log.Printf("* failed to create table `%stemp_messages`: %s", tablePrefix, err)
+						} else {
+							log.Printf("created table: '%stemp_messages'", tablePrefix)
+						}
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_%stemp_messages1 on %stemp_messages(
+							chat_id, message_id
+						)`, tablePrefix, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_%stemp_messages1`: %s", tablePrefix, err)
 						}
 
 						// create table: `PREFIX_queue`
@@ -99,30 +119,30 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 						} else {
 							log.Printf("created table: '%squeue'", tablePrefix)
 						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue1 on %squeue(
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue1 on %squeue(
 							chat_id, delivered_on
-						)`, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_queue1`: %s", err)
+						)`, tablePrefix, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_%squeue1`: %s", tablePrefix, err)
 						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue2 on %squeue(
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue2 on %squeue(
 							enqueued_on, delivered_on
-						)`, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_queue2`: %s", err)
+						)`, tablePrefix, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_%squeue2`: %s", tablePrefix, err)
 						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue3 on %squeue(
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue3 on %squeue(
 							enqueued_on, delivered_on, num_tries
-						)`, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_queue3`: %s", err)
+						)`, tablePrefix, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_%squeue3`: %s", tablePrefix, err)
 						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue4 on %squeue(
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue4 on %squeue(
 							chat_id, delivered_on, enqueued_on
-						)`, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_queue4`: %s", err)
+						)`, tablePrefix, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_%squeue4`: %s", tablePrefix, err)
 						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_queue5 on %squeue(
+						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue5 on %squeue(
 							enqueued_on, delivered_on, num_tries, fire_on
-						)`, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_queue5`: %s", err)
+						)`, tablePrefix, tablePrefix)); err != nil {
+							log.Printf("* failed to create index `idx_%squeue5`: %s", tablePrefix, err)
 						}
 					}
 				}
@@ -204,6 +224,113 @@ func (d *OracleDatabase) GetLogs(latestN int) (logs []Log, err error) {
 	}
 
 	return logs, err
+}
+
+// SaveTemporaryMessage saves a temporary message
+func (d *OracleDatabase) SaveTemporaryMessage(chatID int64, messageID int, message, fileID string, fileType FileType) (result bool, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`insert into %stemp_messages(chat_id, message_id, message, file_id, file_type) values(:1, :2, :3, :4, :5)`, tablePrefix)); err != nil {
+			log.Printf("* failed to prepare a statement: %s", err)
+		} else {
+			defer stmt.Close()
+
+			if _, err = stmt.Exec(chatID, messageID, message, fileID, string(fileType)); err != nil {
+				log.Printf("* failed to save temporary message into oracle database: %s", err)
+			} else {
+				result = true
+			}
+		}
+
+		defer tx.Commit()
+	} else {
+		log.Printf("failed to begin transaction: %s", err)
+	}
+
+	return result, err
+}
+
+// LoadTemporaryMessage retrieves a temporary message
+func (d *OracleDatabase) LoadTemporaryMessage(chatID int64, messageID int) (result TemporaryMessage, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`select 
+			id,
+			chat_id, 
+			message_id,
+			message, 
+			file_id,
+			file_type,
+			saved_on
+			from %stemp_messages
+			where chat_id = :1 and message_id = :2`, tablePrefix)); err != nil {
+			log.Printf("* failed to prepare a statement: %s", err)
+		} else {
+			defer stmt.Close()
+
+			var rows *sql.Rows
+			if rows, err = stmt.Query(chatID, messageID); err != nil {
+				log.Printf("* failed to select tempoary message from oracle database: %s", err)
+			} else {
+				defer rows.Close()
+
+				var id, chatID int64
+				var messageID int
+				var message, fileID string
+				var fileType FileType
+				var savedOn time.Time
+				if rows.Next() {
+					rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &savedOn)
+
+					result = TemporaryMessage{
+						ID:        id,
+						ChatID:    chatID,
+						MessageID: messageID,
+						Message:   message,
+						FileID:    fileID,
+						FileType:  fileType,
+						SavedOn:   savedOn,
+					}
+				} else {
+					err = fmt.Errorf("no temporary message for chat id = %d, message id = %d", chatID, messageID)
+				}
+			}
+		}
+
+		defer tx.Commit()
+	} else {
+		log.Printf("failed to begin transaction: %s", err)
+	}
+
+	return result, err
+}
+
+// DeleteTemporaryMessage deletes given temporary message
+func (d *OracleDatabase) DeleteTemporaryMessage(chatID int64, messageID int) (result bool, err error) {
+	var tx *sql.Tx
+	if tx, err = d.db.Begin(); err == nil {
+		var stmt *sql.Stmt
+		if stmt, err = d.db.Prepare(fmt.Sprintf(`delete from %stemp_messages where chat_id = :1 and message_id = :2`, tablePrefix)); err != nil {
+			log.Printf("* failed to prepare a statement: %s", err)
+		} else {
+			defer stmt.Close()
+
+			if _, err = stmt.Exec(chatID, messageID); err != nil {
+				log.Printf("* failed to delete temporary message from oracle database: %s", err)
+			} else {
+				result = true
+			}
+		}
+
+		defer tx.Commit()
+	} else {
+		log.Printf("failed to begin transaction: %s", err)
+
+	}
+
+	return result, err
 }
 
 // Enqueue enques given message
