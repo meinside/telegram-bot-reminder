@@ -54,7 +54,7 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 		if stmt, err := db.Prepare(`select count(*) as cnt from all_objects
 			where object_type = 'TABLE' and
 				owner = upper(:1) and
-				object_name in (upper(:2), upper(:3))`); err != nil {
+				object_name in (upper(:2), upper(:3), upper(:4))`); err != nil {
 			log.Printf("* failed to prepare a statement: %s", err)
 		} else {
 			defer stmt.Close()
