@@ -29,6 +29,8 @@ const (
 
 	defaultDatetimeFormat = "2006.01.02 15:04" // yyyy.mm.dd hh:MM
 
+	defaultHour = 8 // XXX - 08:00 as default
+
 	messageCancel                 = "취소"
 	messageCommandCanceled        = "명령이 취소 되었습니다."
 	messageReminderCanceledFormat = "알림이 취소 되었습니다: %s"
@@ -48,8 +50,8 @@ const (
 	messageUsage                  = `사용법:
 
 * 기본 사용 방법:
-날짜 또는 시간이 포함된 메시지를 보내면,
-인식한 해당 날짜/시간에 메시지를 다시 보내줍니다.
+날짜 또는 시간이 포함된 메시지, 또는 caption이 포함된 파일을 보내면
+인식한 해당 날짜/시간에 해당 메시지를 다시 보내줍니다.
 
 * 사용 예:
 "내일 이 메시지 다시 보내줄래?"
@@ -743,7 +745,7 @@ func parseMessage(message string) (candidates []time.Time, what string, err erro
 	if dates, err = lkdp.ExtractDates(message, true); err == nil {
 		if times, err = lkdp.ExtractTimes(message, false); err != nil {
 			times = map[string]lkdp.Hms{
-				"default": lkdp.Hms{Hours: 8, Minutes: 0}, // XXX - 08:00 as default
+				"default": lkdp.Hms{Hours: defaultHour, Minutes: 0},
 			}
 		}
 
