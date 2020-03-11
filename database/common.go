@@ -28,6 +28,17 @@ type QueueItem struct {
 	NumTries    int       `json:"num_tries"`
 }
 
+// TemporaryMessage is a struct for temporary message for handling inline queries
+type TemporaryMessage struct {
+	ID        int64     `json:"id"`
+	ChatID    int64     `json:"chat_id"`
+	MessageID int       `json:"message_id"`
+	Message   string    `json:"message"`
+	FileID    string    `json:"file_id,omitempty"`
+	FileType  FileType  `json:"file_type,omitempty"`
+	SavedOn   time.Time `json:"saved_on"`
+}
+
 // FileType is a type of message (file) type
 type FileType string
 

@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,30 +23,35 @@ const (
 
 	commandStart         = "/start"
 	commandListReminders = "/list"
+	commandLoad          = "/load"
 	commandCancel        = "/cancel"
 	commandHelp          = "/help"
 
 	defaultDatetimeFormat = "2006.01.02 15:04" // yyyy.mm.dd hh:MM
 
+	defaultHour = 8 // XXX - 08:00 as default
+
 	messageCancel                 = "취소"
 	messageCommandCanceled        = "명령이 취소 되었습니다."
 	messageReminderCanceledFormat = "알림이 취소 되었습니다: %s"
 	messageError                  = "오류가 발생했습니다."
+	messageErrorFormat            = "오류가 발생했습니다: %s"
 	messageNoReminders            = "예약된 알림이 없습니다."
-	messageNoDateTime             = "날짜 또는 시간이 없습니다: %s"
+	messageNoDateTime             = "유효한 날짜 또는 시간이 없습니다: %s"
 	messageListItemFormat         = "☑ %s; %s"
-	messageResponseFormat         = `@%s님에게 %s에 "%s" 알림 예정입니다.`
+	messageResponseFormat         = `%s에 "%s" 알림 예정입니다.`
 	messageSaveFailedFormat       = "알림 저장을 실패 했습니다: %s (%s)"
 	messageParseFailedFormat      = "메시지를 이해하지 못했습니다: %s"
+	messageSelectWhat             = "어떤 시간을 원하십니까?"
 	messageCancelWhat             = "어떤 알림을 취소하시겠습니까?"
-	messageTimeIsPastFormat       = "2006.01.02 15:04는 이미 지난 시각입니다"
+	messageTimeIsPast             = "이미 지난 시각입니다."
 	messageSendingBackFile        = "받은 파일을 즉시 다시 보내드립니다."
 	messageWillSendBackFileFormat = "@%s님에게 받은 파일(%s)을 %s에 보내드리겠습니다."
 	messageUsage                  = `사용법:
 
 * 기본 사용 방법:
-날짜 또는 시간이 포함된 메시지를 보내면,
-인식한 해당 날짜/시간에 메시지를 다시 보내줍니다.
+날짜 또는 시간이 포함된 메시지, 또는 caption이 포함된 파일을 보내면
+인식한 해당 날짜/시간에 해당 메시지를 다시 보내줍니다.
 
 * 사용 예:
 "내일 이 메시지 다시 보내줄래?"
@@ -102,6 +108,9 @@ type DatabaseInterface interface {
 	Log(msg string)
 	LogError(msg string)
 	GetLogs(latestN int) ([]database.Log, error)
+	SaveTemporaryMessage(chatID int64, messageID int, message, fileID string, fileType database.FileType) (bool, error)
+	LoadTemporaryMessage(chatID int64, messageID int) (database.TemporaryMessage, error)
+	DeleteTemporaryMessage(chatID int64, messageID int) (bool, error)
 	Enqueue(chatID int64, messageID int, message, fileID string, fileType database.FileType, fireOn time.Time) (bool, error)
 	DeliverableQueueItems(maxNumTries int) ([]database.QueueItem, error)
 	UndeliveredQueueItems(chatID int64) ([]database.QueueItem, error)
@@ -345,15 +354,29 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				} else if strings.HasPrefix(txt, commandHelp) {
 					message = messageUsage
 				} else {
-					if when, what, err := parseMessage(txt); err == nil {
-						if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, "", "", when); err == nil {
-							message = fmt.Sprintf(messageResponseFormat,
-								username,
-								when.In(_location).Format(defaultDatetimeFormat),
-								what,
-							)
+					if whens, _, err := parseMessage(txt); err == nil {
+						if len(whens) == 1 {
+							when := whens[0]
+
+							if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, "", "", when); err == nil {
+								message = fmt.Sprintf(messageResponseFormat,
+									when.In(_location).Format(defaultDatetimeFormat),
+									txt,
+								)
+							} else {
+								message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+							}
 						} else {
-							message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+							if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, "", ""); err == nil {
+								message = messageSelectWhat
+
+								// options for inline keyboards
+								options["reply_markup"] = bot.InlineKeyboardMarkup{
+									InlineKeyboard: datetimeButtonsForCallbackQuery(whens, chatID, update.Message.MessageID),
+								}
+							} else {
+								message = messageError
+							}
 						}
 					} else {
 						message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -385,14 +408,15 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 	result := false
 
 	query := *update.CallbackQuery
-	txt := *query.Data
+	data := *query.Data
 
 	var message = messageError
-	if strings.HasPrefix(txt, commandCancel) {
-		if txt == commandCancel {
+
+	if strings.HasPrefix(data, commandCancel) {
+		if data == commandCancel {
 			message = messageCommandCanceled
 		} else {
-			cancelParam := strings.TrimSpace(strings.Replace(txt, commandCancel, "", 1))
+			cancelParam := strings.TrimSpace(strings.Replace(data, commandCancel, "", 1))
 			if queueID, err := strconv.Atoi(cancelParam); err == nil {
 				if item, err := db.GetQueueItem(query.Message.Chat.ID, int64(queueID)); err == nil {
 					if _, err := db.DeleteQueueItem(query.Message.Chat.ID, int64(queueID)); err == nil {
@@ -404,11 +428,47 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 					_stderr.Printf("failed to get reminder: %s", err)
 				}
 			} else {
-				_stderr.Printf("unprocessable callback query: %s", txt)
+				_stderr.Printf("unprocessable callback query: %s", data)
 			}
 		}
+	} else if strings.HasPrefix(data, commandLoad) {
+		params := strings.Split(strings.TrimSpace(strings.Replace(data, commandLoad, "", 1)), "/")
+
+		if len(params) >= 3 {
+			if chatID, err := strconv.ParseInt(params[0], 10, 64); err == nil {
+				if messageID, err := strconv.Atoi(params[1]); err == nil {
+					if saved, err := db.LoadTemporaryMessage(chatID, messageID); err == nil {
+						if when, err := time.ParseInLocation(defaultDatetimeFormat, params[2], _location); err == nil {
+							if _, err := db.Enqueue(chatID, messageID, saved.Message, saved.FileID, saved.FileType, when); err == nil {
+								message = fmt.Sprintf(messageResponseFormat,
+									when.In(_location).Format(defaultDatetimeFormat),
+									saved.Message,
+								)
+
+								// delete temporary message
+								if _, err := db.DeleteTemporaryMessage(chatID, messageID); err != nil {
+									_stderr.Printf("failed to delete temporary message: %s", err)
+								}
+							} else {
+								message = fmt.Sprintf(messageSaveFailedFormat, saved.Message, err)
+							}
+						} else {
+							_stderr.Printf("failed to parse time: %s", err)
+						}
+					} else {
+						_stderr.Printf("failed to load temporary message with chat id: %d, message id: %d", chatID, messageID)
+					}
+				} else {
+					_stderr.Printf("failed to convert message id: %s", err)
+				}
+			} else {
+				_stderr.Printf("failed to convert chat id: %s", err)
+			}
+		} else {
+			_stderr.Printf("malformed inline keyboard data: %s", data)
+		}
 	} else {
-		_stderr.Printf("unprocessable callback query: %s", txt)
+		_stderr.Printf("unprocessable callback query: %s", data)
 	}
 
 	// answer callback query
@@ -447,16 +507,36 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 
 		if update.Message.HasCaption() {
 			txt := *update.Message.Caption
-			if when, _, err := parseMessage(txt); err == nil {
-				// enqueue received file
-				if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeDocument, when); err == nil {
-					message = fmt.Sprintf(messageWillSendBackFileFormat,
-						username,
-						"file",
-						when.In(_location).Format(defaultDatetimeFormat),
-					)
+
+			if whens, _, err := parseMessage(txt); err == nil {
+				if len(whens) == 1 {
+					when := whens[0]
+
+					// enqueue received file
+					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeDocument, when); err == nil {
+						message = fmt.Sprintf(messageWillSendBackFileFormat,
+							username,
+							"file",
+							when.In(_location).Format(defaultDatetimeFormat),
+						)
+
+						success = true
+					} else {
+						message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+					}
 				} else {
-					message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, fileID, database.FileTypeDocument); err == nil {
+						message = messageSelectWhat
+
+						// options for inline keyboards
+						options["reply_markup"] = bot.InlineKeyboardMarkup{
+							InlineKeyboard: datetimeButtonsForCallbackQuery(whens, chatID, update.Message.MessageID),
+						}
+
+						success = true
+					} else {
+						message = messageError
+					}
 				}
 			} else {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -479,18 +559,36 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 
 		if update.Message.HasCaption() {
 			txt := *update.Message.Caption
-			if when, _, err := parseMessage(txt); err == nil {
-				// enqueue received file
-				if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeAudio, when); err == nil {
-					message = fmt.Sprintf(messageWillSendBackFileFormat,
-						username,
-						"audio",
-						when.In(_location).Format(defaultDatetimeFormat),
-					)
 
-					success = true
+			if whens, _, err := parseMessage(txt); err == nil {
+				if len(whens) == 1 {
+					when := whens[0]
+
+					// enqueue received file
+					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeAudio, when); err == nil {
+						message = fmt.Sprintf(messageWillSendBackFileFormat,
+							username,
+							"audio",
+							when.In(_location).Format(defaultDatetimeFormat),
+						)
+
+						success = true
+					} else {
+						message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+					}
 				} else {
-					message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, fileID, database.FileTypeAudio); err == nil {
+						message = messageSelectWhat
+
+						// options for inline keyboards
+						options["reply_markup"] = bot.InlineKeyboardMarkup{
+							InlineKeyboard: datetimeButtonsForCallbackQuery(whens, chatID, update.Message.MessageID),
+						}
+
+						success = true
+					} else {
+						message = messageError
+					}
 				}
 			} else {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -509,23 +607,41 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			}
 		}
 	} else if update.Message.HasPhoto() { // photo
+		photo := update.Message.LargestPhoto()
+		fileID := photo.FileID
+
 		if update.Message.HasCaption() {
 			txt := *update.Message.Caption
-			if when, _, err := parseMessage(txt); err == nil {
-				photo := update.Message.LargestPhoto()
-				fileID := photo.FileID
 
-				// enqueue received file
-				if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypePhoto, when); err == nil {
-					message = fmt.Sprintf(messageWillSendBackFileFormat,
-						username,
-						"image",
-						when.In(_location).Format(defaultDatetimeFormat),
-					)
+			if whens, _, err := parseMessage(txt); err == nil {
+				if len(whens) == 1 {
+					when := whens[0]
 
-					success = true
+					// enqueue received file
+					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypePhoto, when); err == nil {
+						message = fmt.Sprintf(messageWillSendBackFileFormat,
+							username,
+							"image",
+							when.In(_location).Format(defaultDatetimeFormat),
+						)
+
+						success = true
+					} else {
+						message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+					}
 				} else {
-					message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, fileID, database.FileTypePhoto); err == nil {
+						message = messageSelectWhat
+
+						// options for inline keyboards
+						options["reply_markup"] = bot.InlineKeyboardMarkup{
+							InlineKeyboard: datetimeButtonsForCallbackQuery(whens, chatID, update.Message.MessageID),
+						}
+
+						success = true
+					} else {
+						message = messageError
+					}
 				}
 			} else {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -536,9 +652,6 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			}
 		} else {
 			options["caption"] = messageSendingBackFile
-
-			photo := update.Message.LargestPhoto()
-			fileID := photo.FileID
 
 			// send received file back immediately
 			if sent := b.SendPhoto(chatID, bot.InputFileFromFileID(fileID), options); sent.Ok {
@@ -561,18 +674,36 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 
 		if update.Message.HasCaption() {
 			txt := *update.Message.Caption
-			if when, _, err := parseMessage(txt); err == nil {
-				// enqueue received file
-				if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeVideo, when); err == nil {
-					message = fmt.Sprintf(messageWillSendBackFileFormat,
-						username,
-						"video",
-						when.In(_location).Format(defaultDatetimeFormat),
-					)
 
-					success = true
+			if whens, _, err := parseMessage(txt); err == nil {
+				if len(whens) == 1 {
+					when := whens[0]
+
+					// enqueue received file
+					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeVideo, when); err == nil {
+						message = fmt.Sprintf(messageWillSendBackFileFormat,
+							username,
+							"image",
+							when.In(_location).Format(defaultDatetimeFormat),
+						)
+
+						success = true
+					} else {
+						message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+					}
 				} else {
-					message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, fileID, database.FileTypeVideo); err == nil {
+						message = messageSelectWhat
+
+						// options for inline keyboards
+						options["reply_markup"] = bot.InlineKeyboardMarkup{
+							InlineKeyboard: datetimeButtonsForCallbackQuery(whens, chatID, update.Message.MessageID),
+						}
+
+						success = true
+					} else {
+						message = messageError
+					}
 				}
 			} else {
 				message = fmt.Sprintf(messageParseFailedFormat, err)
@@ -589,7 +720,6 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			} else {
 				_stderr.Printf("failed to send video back: %s", *sent.Description)
 			}
-
 		}
 	} else if update.Message.HasVoice() { // voice (has no caption)
 		fileID := update.Message.Voice.FileID
@@ -606,34 +736,125 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 	return success
 }
 
-func parseMessage(message string) (when time.Time, what string, err error) {
+func parseMessage(message string) (candidates []time.Time, what string, err error) {
 	now := time.Now()
-
 	what = fmt.Sprintf("%s", message) // XXX - edit this?
 
-	var hms lkdp.Hms
-	if when, err = lkdp.ExtractDate(message, true); err == nil {
-		if hms, err = lkdp.ExtractTime(message, false); err != nil {
-			hms.Hours, hms.Minutes = 8, 0 // XXX - 08:00 as default
+	dates := map[string]time.Time{}
+	times := map[string]lkdp.Hms{}
+	if dates, err = lkdp.ExtractDates(message, true); err == nil {
+		if times, err = lkdp.ExtractTimes(message, false); err != nil {
+			times = map[string]lkdp.Hms{
+				"default": lkdp.Hms{Hours: defaultHour, Minutes: 0},
+			}
 		}
-		when = when.Add(time.Duration(hms.Hours) * time.Hour).Add(time.Duration(hms.Minutes) * time.Minute)
+
+		// generate combinations from parsed dates and times
+		for _, d := range dates {
+			for _, t := range times {
+				d = d.Add(time.Duration(t.Hours) * time.Hour).Add(time.Duration(t.Minutes) * time.Minute)
+
+				candidates = append(candidates, d)
+			}
+		}
 	} else {
+		var when time.Time
 		var daysChanged int
-		if hms, err = lkdp.ExtractTime(message, false); err == nil {
-			when = time.Date(now.Year(), now.Month(), now.Day(), hms.Hours, hms.Minutes, 0, 0, _location)
-			if daysChanged != 0 {
-				when = when.Add(time.Duration(daysChanged*24) * time.Hour)
+		if times, err = lkdp.ExtractTimes(message, false); err == nil {
+			for _, t := range times {
+				when = time.Date(now.Year(), now.Month(), now.Day(), t.Hours, t.Minutes, 0, 0, _location)
+				if daysChanged != 0 {
+					when = when.Add(time.Duration(daysChanged*24) * time.Hour)
+				}
+
+				candidates = append(candidates, when)
 			}
 		} else {
-			return time.Time{}, "", fmt.Errorf(messageNoDateTime, message)
+			return nil, "", fmt.Errorf(messageNoDateTime, message)
 		}
 	}
 
-	if when.Unix() >= now.Unix() {
-		return when, what, nil
+	// remove duplicates from candidates
+	candidates = uniqueTimes(candidates)
+
+	// remove past datetimes from candidates
+	var filteredPast bool
+	candidates, filteredPast = filterPastTimes(now, candidates)
+
+	// sort candidates by datetime (asc)
+	sortTimes(candidates)
+
+	// check if candidates is empty
+	if len(candidates) > 0 {
+		return candidates, message, nil
 	}
 
-	return time.Time{}, "", fmt.Errorf(when.In(_location).Format(messageTimeIsPastFormat))
+	if filteredPast {
+		err = fmt.Errorf(messageTimeIsPast)
+	} else {
+		err = fmt.Errorf(messageNoDateTime, message)
+	}
+
+	return nil, "", err
+}
+
+// filter unique times
+func uniqueTimes(times []time.Time) []time.Time {
+	m := map[time.Time]bool{}
+	uniques := []time.Time{}
+
+	for _, t := range times {
+		if _, exists := m[t]; !exists {
+			m[t] = true
+			uniques = append(uniques, t)
+		}
+	}
+
+	return uniques
+}
+
+// filter out past times
+func filterPastTimes(when time.Time, times []time.Time) ([]time.Time, bool) {
+	pastTimesExist := false
+	filtered := []time.Time{}
+
+	for _, t := range times {
+		if t.Unix() > when.Unix() {
+			filtered = append(filtered, t)
+		} else {
+			pastTimesExist = true
+		}
+	}
+
+	return filtered, pastTimesExist
+}
+
+// sort given times
+func sortTimes(times []time.Time) {
+	sort.Slice(times, func(i, j int) bool {
+		return times[i].Before(times[j])
+	})
+}
+
+// generate inline keyboard buttons for multiple datetimes
+func datetimeButtonsForCallbackQuery(times []time.Time, chatID int64, messageID int) [][]bot.InlineKeyboardButton {
+	// datetime buttons
+	keys := make(map[string]string)
+	for _, w := range times {
+		keys[w.In(_location).Format(defaultDatetimeFormat)] = fmt.Sprintf("%s %d/%d/%s", commandLoad, chatID, messageID, w.In(_location).Format(defaultDatetimeFormat))
+	}
+	buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
+
+	// add cancel button
+	cancel := commandCancel
+	buttons = append(buttons, []bot.InlineKeyboardButton{
+		bot.InlineKeyboardButton{
+			Text:         messageCancel,
+			CallbackData: &cancel,
+		},
+	})
+
+	return buttons
 }
 
 // default message options
