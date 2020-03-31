@@ -21,11 +21,14 @@ const (
 	configFilename = "config.json"
 	dbFilename     = "db.sqlite"
 
-	commandStart         = "/start"
-	commandListReminders = "/list"
-	commandLoad          = "/load"
-	commandCancel        = "/cancel"
-	commandHelp          = "/help"
+	commandStart                    = "/start"
+	commandListReminders            = "/list"
+	commandLoad                     = "/load"
+	commandCancel                   = "/cancel"
+	commandHelp                     = "/help"
+	descriptionCommandListReminders = "알림 조회"
+	descriptionCommandCancel        = "알림 취소"
+	descriptionCommandHelp          = "도움말 보기"
 
 	defaultDatetimeFormat = "2006.01.02 15:04" // yyyy.mm.dd hh:MM
 
@@ -755,19 +758,29 @@ func parseMessage(message string) (candidates []time.Time, what string, err erro
 				d = d.Add(time.Duration(t.Hours) * time.Hour).Add(time.Duration(t.Minutes) * time.Minute)
 
 				candidates = append(candidates, d)
+
+				// if the candidate is in AM, also add PM
+				if t.Hours < 12 && t.Hours > 0 {
+					d = d.Add(time.Hour * 12)
+
+					candidates = append(candidates, d)
+				}
 			}
 		}
 	} else {
 		var when time.Time
-		var daysChanged int
 		if times, err = lkdp.ExtractTimes(message, false); err == nil {
 			for _, t := range times {
 				when = time.Date(now.Year(), now.Month(), now.Day(), t.Hours, t.Minutes, 0, 0, _location)
-				if daysChanged != 0 {
-					when = when.Add(time.Duration(daysChanged*24) * time.Hour)
-				}
 
 				candidates = append(candidates, when)
+
+				// if the candidate is in AM, also add PM
+				if t.Hours < 12 && t.Hours > 0 {
+					when = when.Add(time.Hour * 12)
+
+					candidates = append(candidates, when)
+				}
 			}
 		} else {
 			return nil, "", fmt.Errorf(messageNoDateTime, message)
@@ -879,6 +892,14 @@ func main() {
 
 	// get info about this bot
 	if me := telegram.GetMe(); me.Ok {
+		if setCommands := telegram.SetMyCommands([]bot.BotCommand{
+			bot.BotCommand{Command: commandListReminders, Description: descriptionCommandListReminders},
+			bot.BotCommand{Command: commandCancel, Description: descriptionCommandCancel},
+			bot.BotCommand{Command: commandHelp, Description: descriptionCommandHelp},
+		}); !setCommands.Ok {
+			_stderr.Printf("failed to set bot commands")
+		}
+
 		_stdout.Printf("starting bot: @%s (%s)", *me.Result.Username, me.Result.FirstName)
 
 		// delete webhook (getting updates will not work when wehbook is set up)
