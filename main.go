@@ -758,19 +758,29 @@ func parseMessage(message string) (candidates []time.Time, what string, err erro
 				d = d.Add(time.Duration(t.Hours) * time.Hour).Add(time.Duration(t.Minutes) * time.Minute)
 
 				candidates = append(candidates, d)
+
+				// if the candidate is in AM, also add PM
+				if t.Hours < 12 && t.Hours > 0 {
+					d = d.Add(time.Hour * 12)
+
+					candidates = append(candidates, d)
+				}
 			}
 		}
 	} else {
 		var when time.Time
-		var daysChanged int
 		if times, err = lkdp.ExtractTimes(message, false); err == nil {
 			for _, t := range times {
 				when = time.Date(now.Year(), now.Month(), now.Day(), t.Hours, t.Minutes, 0, 0, _location)
-				if daysChanged != 0 {
-					when = when.Add(time.Duration(daysChanged*24) * time.Hour)
-				}
 
 				candidates = append(candidates, when)
+
+				// if the candidate is in AM, also add PM
+				if t.Hours < 12 && t.Hours > 0 {
+					when = when.Add(time.Hour * 12)
+
+					candidates = append(candidates, when)
+				}
 			}
 		} else {
 			return nil, "", fmt.Errorf(messageNoDateTime, message)
