@@ -63,8 +63,8 @@ github.com/go-logfmt/logfmt v0.5.0/go.mod h1:wCYkCAKZfumFQihp8CzCvQ3paCTfi41vtzG
 github.com/go-sql-driver/mysql v1.4.0/go.mod h1:zAC/RDZ24gD3HViQzih4MyKcchzm+sOG5ZlKdlhCg5w=
 github.com/go-stack/stack v1.8.0 h1:5SgMzNM5HxrEjV0ww2lTmX6E2Izsfxas4+YHWRs3Lsk=
 github.com/go-stack/stack v1.8.0/go.mod h1:v0f6uXyyMGvRgIKkXu+yp6POWl0qKG85gN/melR3HDY=
-github.com/godror/godror v0.13.1 h1:w2/J+5a61f0ddWiUli9RRKM6N4hHis3GYq68MbCgvL8=
-github.com/godror/godror v0.13.1/go.mod h1:2ouUT4kdhUBk7TAkHWD4SN0CdI0pgEQbo8FVHhbSKWg=
+github.com/godror/godror v0.13.2 h1:nFgaTw40htL/cwkrm1LUulsKH+58j7UhioeAWA1ggS0=
+github.com/godror/godror v0.13.2/go.mod h1:2ouUT4kdhUBk7TAkHWD4SN0CdI0pgEQbo8FVHhbSKWg=
 github.com/gogo/googleapis v1.1.0/go.mod h1:gf4bu3Q80BeJ6H1S1vYPm8/ELATdvryBaNFGgqEef3s=
 github.com/gogo/protobuf v1.1.1/go.mod h1:r8qH/GZQm5c6nD/R0oafs1akxWv10x8SbQlK7atdtwQ=
 github.com/gogo/protobuf v1.2.0/go.mod h1:r8qH/GZQm5c6nD/R0oafs1akxWv10x8SbQlK7atdtwQ=
@@ -145,9 +145,9 @@ github.com/mattn/go-sqlite3 v2.0.3+incompatible/go.mod h1:FPy6KqzDD04eiIsT53CuJW
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
 github.com/meinside/lazy-korean-date-parser-go v0.1.0 h1:pNa6D2gmcyoxVNBE8cqVwFE5rGnnPLjGUtaQ4sri6Zg=
 github.com/meinside/lazy-korean-date-parser-go v0.1.0/go.mod h1:btf9ArXl0PytnVWiW1QjGNm86nxWbosk+cGZKvLzwf0=
-github.com/meinside/telegram-bot-go v0.1.0 h1:x08/dDb+1eKwAQaXX+fNQHMqB2E47mw15vd6wV4rdME=
-github.com/meinside/telegram-bot-go v0.1.0/go.mod h1:Qzuml5ZQdtPhzICDiCfdaYVTFfkKsdHNsvnH+vYuYWo=
-github.com/meinside/wasm-helper-go v0.1.0/go.mod h1:Seqf/Sk8HL7TM8urkLx3IakDRFq2euF2ssa5j5V3onI=
+github.com/meinside/telegram-bot-go v0.2.0 h1:yBdgZSK85HIuz5xSO2VHzRLmsCgIu3aLwkTjO4mFVDE=
+github.com/meinside/telegram-bot-go v0.2.0/go.mod h1:jDaH+fUmboVGzFjj8upRElBzCi/mifXwW1Hh1ZWsMI0=
+github.com/meinside/wasm-helper-go v0.2.0/go.mod h1:R7HWwqw/j/ybMTaQ/WF/wiN6YbYY8LLINQp28lcWork=
 github.com/miekg/dns v1.0.14/go.mod h1:W1PPwlIAgtquWBMBEV9nkV9Cazfe8ScdGz/Lj7v3Nrg=
 github.com/mitchellh/cli v1.0.0/go.mod h1:hNIlj7HEI86fIcpObd7a0FcrxTWetlwJDGcceTlRvqc=
 github.com/mitchellh/go-homedir v1.0.0/go.mod h1:SfyaCUpYCn1Vlf4IUYiD9fPX4A5wJrkLzIz1N1q0pr0=
