@@ -21,11 +21,14 @@ const (
 	configFilename = "config.json"
 	dbFilename     = "db.sqlite"
 
-	commandStart         = "/start"
-	commandListReminders = "/list"
-	commandLoad          = "/load"
-	commandCancel        = "/cancel"
-	commandHelp          = "/help"
+	commandStart                    = "/start"
+	commandListReminders            = "/list"
+	commandLoad                     = "/load"
+	commandCancel                   = "/cancel"
+	commandHelp                     = "/help"
+	descriptionCommandListReminders = "알림 조회"
+	descriptionCommandCancel        = "알림 취소"
+	descriptionCommandHelp          = "도움말 보기"
 
 	defaultDatetimeFormat = "2006.01.02 15:04" // yyyy.mm.dd hh:MM
 
@@ -879,6 +882,14 @@ func main() {
 
 	// get info about this bot
 	if me := telegram.GetMe(); me.Ok {
+		if setCommands := telegram.SetMyCommands([]bot.BotCommand{
+			bot.BotCommand{Command: commandListReminders, Description: descriptionCommandListReminders},
+			bot.BotCommand{Command: commandCancel, Description: descriptionCommandCancel},
+			bot.BotCommand{Command: commandHelp, Description: descriptionCommandHelp},
+		}); !setCommands.Ok {
+			_stderr.Printf("failed to set bot commands")
+		}
+
 		_stdout.Printf("starting bot: @%s (%s)", *me.Result.Username, me.Result.FirstName)
 
 		// delete webhook (getting updates will not work when wehbook is set up)
