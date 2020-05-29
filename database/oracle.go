@@ -25,21 +25,33 @@ var _oracle *OracleDatabase = nil
 func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 	if _oracle == nil {
 		connParams := godror.ConnectionParams{
-			Username:             id,
-			Password:             passwd,
-			SID:                  sid,
-			MinSessions:          1,
-			MaxSessions:          4,
-			PoolIncrement:        1,
+			CommonParams: godror.CommonParams{
+				Username:     id,
+				Password:     passwd,
+				DSN:          sid,
+				Timezone:     time.Local,
+				EnableEvents: true,
+			},
+			PoolParams: godror.PoolParams{
+				WaitTimeout:      10 * time.Second,
+				MaxLifeTime:      5 * time.Minute,
+				SessionTimeout:   30 * time.Second,
+				MinSessions:      1,
+				MaxSessions:      4,
+				SessionIncrement: 1,
+			},
+			ConnParams: godror.ConnParams{
+				ConnClass: "POOLED",
+			},
 			StandaloneConnection: false,
-			WaitTimeout:          10 * time.Second,
-			MaxLifeTime:          5 * time.Minute,
-			SessionTimeout:       30 * time.Second,
-			ConnClass:            "POOLED",
-			EnableEvents:         true,
 		}
 
 		db, err := sql.Open("godror", connParams.StringWithPassword())
+
+		// https://github.com/godror/godror#warnings
+		db.SetMaxIdleConns(0)
+		db.SetMaxOpenConns(0)
+		db.SetConnMaxLifetime(0)
 
 		if err != nil {
 			log.Printf("failed to connect to oracle database: %s", err)
