@@ -748,7 +748,7 @@ func parseMessage(message string) (candidates []time.Time, what string, err erro
 	if dates, err = lkdp.ExtractDates(message, true); err == nil {
 		if times, err = lkdp.ExtractTimes(message, false); err != nil {
 			times = map[string]lkdp.Hms{
-				"default": lkdp.Hms{Hours: defaultHour, Minutes: 0},
+				"default": {Hours: defaultHour, Minutes: 0},
 			}
 		}
 
@@ -759,8 +759,8 @@ func parseMessage(message string) (candidates []time.Time, what string, err erro
 
 				candidates = append(candidates, d)
 
-				// if the candidate is in AM, also add PM
-				if t.Hours < 12 && t.Hours > 0 {
+				// if the candidate is in AM, also add PM version of it
+				if t.Hours < 12 && t.Hours > 0 && t.Ambiguous {
 					d = d.Add(time.Hour * 12)
 
 					candidates = append(candidates, d)
@@ -775,8 +775,8 @@ func parseMessage(message string) (candidates []time.Time, what string, err erro
 
 				candidates = append(candidates, when)
 
-				// if the candidate is in AM, also add PM
-				if t.Hours < 12 && t.Hours > 0 {
+				// if the candidate is in AM, also add PM version of it
+				if t.Hours < 12 && t.Hours > 0 && t.Ambiguous {
 					when = when.Add(time.Hour * 12)
 
 					candidates = append(candidates, when)
