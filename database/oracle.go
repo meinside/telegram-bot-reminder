@@ -26,11 +26,11 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 	if _oracle == nil {
 		connParams := godror.ConnectionParams{
 			CommonParams: godror.CommonParams{
-				Username:     id,
-				Password:     passwd,
-				DSN:          sid,
-				Timezone:     time.Local,
-				EnableEvents: true,
+				Username:      id,
+				Password:      godror.NewPassword(passwd),
+				ConnectString: sid,
+				Timezone:      time.Local,
+				EnableEvents:  true,
 			},
 			PoolParams: godror.PoolParams{
 				WaitTimeout:      10 * time.Second,
