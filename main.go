@@ -903,7 +903,7 @@ func main() {
 		_stdout.Printf("starting bot: @%s (%s)", *me.Result.Username, me.Result.FirstName)
 
 		// delete webhook (getting updates will not work when wehbook is set up)
-		if unhooked := telegram.DeleteWebhook(); unhooked.Ok {
+		if unhooked := telegram.DeleteWebhook(true); unhooked.Ok {
 			// wait for new updates
 			telegram.StartMonitoringUpdates(0, _telegramIntervalSeconds, processUpdate)
 		} else {
