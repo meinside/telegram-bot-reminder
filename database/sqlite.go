@@ -181,7 +181,7 @@ func (d *SQLiteDatabase) GetLogs(latestN int) (logs []Log, err error) {
 }
 
 // SaveTemporaryMessage saves a temporary message
-func (d *SQLiteDatabase) SaveTemporaryMessage(chatID int64, messageID int, message, fileID string, fileType FileType) (result bool, err error) {
+func (d *SQLiteDatabase) SaveTemporaryMessage(chatID int64, messageID int64, message, fileID string, fileType FileType) (result bool, err error) {
 	d.Lock()
 	defer d.Unlock()
 
@@ -202,7 +202,7 @@ func (d *SQLiteDatabase) SaveTemporaryMessage(chatID int64, messageID int, messa
 }
 
 // LoadTemporaryMessage retrieves a temporary message
-func (d *SQLiteDatabase) LoadTemporaryMessage(chatID int64, messageID int) (result TemporaryMessage, err error) {
+func (d *SQLiteDatabase) LoadTemporaryMessage(chatID int64, messageID int64) (result TemporaryMessage, err error) {
 	d.RLock()
 	defer d.RUnlock()
 
@@ -227,8 +227,7 @@ func (d *SQLiteDatabase) LoadTemporaryMessage(chatID int64, messageID int) (resu
 		} else {
 			defer rows.Close()
 
-			var id, chatID int64
-			var messageID int
+			var id, chatID, messageID int64
 			var message, fileID string
 			var fileType FileType
 			var savedOn int64
@@ -254,7 +253,7 @@ func (d *SQLiteDatabase) LoadTemporaryMessage(chatID int64, messageID int) (resu
 }
 
 // DeleteTemporaryMessage deletes given temporary message
-func (d *SQLiteDatabase) DeleteTemporaryMessage(chatID int64, messageID int) (result bool, err error) {
+func (d *SQLiteDatabase) DeleteTemporaryMessage(chatID int64, messageID int64) (result bool, err error) {
 	d.Lock()
 	defer d.Unlock()
 
@@ -275,7 +274,7 @@ func (d *SQLiteDatabase) DeleteTemporaryMessage(chatID int64, messageID int) (re
 }
 
 // Enqueue enques given message
-func (d *SQLiteDatabase) Enqueue(chatID int64, messageID int, message, fileID string, fileType FileType, fireOn time.Time) (result bool, err error) {
+func (d *SQLiteDatabase) Enqueue(chatID int64, messageID int64, message, fileID string, fileType FileType, fireOn time.Time) (result bool, err error) {
 	d.Lock()
 	defer d.Unlock()
 
@@ -328,8 +327,7 @@ func (d *SQLiteDatabase) DeliverableQueueItems(maxNumTries int) (queue []QueueIt
 		} else {
 			defer rows.Close()
 
-			var id, chatID int64
-			var messageID int
+			var id, chatID, messageID int64
 			var message, fileID string
 			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
@@ -383,8 +381,7 @@ func (d *SQLiteDatabase) UndeliveredQueueItems(chatID int64) (queue []QueueItem,
 		} else {
 			defer rows.Close()
 
-			var id, chatID int64
-			var messageID int
+			var id, chatID, messageID int64
 			var message, fileID string
 			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
@@ -437,8 +434,7 @@ func (d *SQLiteDatabase) GetQueueItem(chatID, queueID int64) (queueItem QueueIte
 		} else {
 			defer rows.Close()
 
-			var id, chatID int64
-			var messageID int
+			var id, chatID, messageID int64
 			var message, fileID string
 			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
