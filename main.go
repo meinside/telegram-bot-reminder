@@ -336,7 +336,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 							// add a cancel button for canceling reminder
 							cancel := commandCancel
 							buttons = append(buttons, []bot.InlineKeyboardButton{
-								bot.InlineKeyboardButton{
+								{
 									Text:         messageCancel,
 									CallbackData: &cancel,
 								},
@@ -861,7 +861,7 @@ func datetimeButtonsForCallbackQuery(times []time.Time, chatID int64, messageID 
 	// add cancel button
 	cancel := commandCancel
 	buttons = append(buttons, []bot.InlineKeyboardButton{
-		bot.InlineKeyboardButton{
+		{
 			Text:         messageCancel,
 			CallbackData: &cancel,
 		},
@@ -893,9 +893,9 @@ func main() {
 	// get info about this bot
 	if me := telegram.GetMe(); me.Ok {
 		if setCommands := telegram.SetMyCommands([]bot.BotCommand{
-			bot.BotCommand{Command: commandListReminders, Description: descriptionCommandListReminders},
-			bot.BotCommand{Command: commandCancel, Description: descriptionCommandCancel},
-			bot.BotCommand{Command: commandHelp, Description: descriptionCommandHelp},
+			{Command: commandListReminders, Description: descriptionCommandListReminders},
+			{Command: commandCancel, Description: descriptionCommandCancel},
+			{Command: commandHelp, Description: descriptionCommandHelp},
 		}); !setCommands.Ok {
 			_stderr.Printf("failed to set bot commands")
 		}
