@@ -18,7 +18,7 @@ type Log struct {
 type QueueItem struct {
 	ID          int64     `json:"id"`
 	ChatID      int64     `json:"chat_id"`
-	MessageID   int       `json:"message_id"`
+	MessageID   int64     `json:"message_id"`
 	Message     string    `json:"message"`
 	FileID      string    `json:"file_id,omitempty"`
 	FileType    FileType  `json:"file_type,omitempty"`
@@ -32,7 +32,7 @@ type QueueItem struct {
 type TemporaryMessage struct {
 	ID        int64     `json:"id"`
 	ChatID    int64     `json:"chat_id"`
-	MessageID int       `json:"message_id"`
+	MessageID int64     `json:"message_id"`
 	Message   string    `json:"message"`
 	FileID    string    `json:"file_id,omitempty"`
 	FileType  FileType  `json:"file_type,omitempty"`

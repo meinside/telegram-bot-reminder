@@ -239,7 +239,7 @@ func (d *OracleDatabase) GetLogs(latestN int) (logs []Log, err error) {
 }
 
 // SaveTemporaryMessage saves a temporary message
-func (d *OracleDatabase) SaveTemporaryMessage(chatID int64, messageID int, message, fileID string, fileType FileType) (result bool, err error) {
+func (d *OracleDatabase) SaveTemporaryMessage(chatID int64, messageID int64, message, fileID string, fileType FileType) (result bool, err error) {
 	var tx *sql.Tx
 	if tx, err = d.db.Begin(); err == nil {
 		var stmt *sql.Stmt
@@ -264,7 +264,7 @@ func (d *OracleDatabase) SaveTemporaryMessage(chatID int64, messageID int, messa
 }
 
 // LoadTemporaryMessage retrieves a temporary message
-func (d *OracleDatabase) LoadTemporaryMessage(chatID int64, messageID int) (result TemporaryMessage, err error) {
+func (d *OracleDatabase) LoadTemporaryMessage(chatID int64, messageID int64) (result TemporaryMessage, err error) {
 	var tx *sql.Tx
 	if tx, err = d.db.Begin(); err == nil {
 		var stmt *sql.Stmt
@@ -288,8 +288,7 @@ func (d *OracleDatabase) LoadTemporaryMessage(chatID int64, messageID int) (resu
 			} else {
 				defer rows.Close()
 
-				var id, chatID int64
-				var messageID int
+				var id, chatID, messageID int64
 				var message, fileID string
 				var fileType FileType
 				var savedOn time.Time
@@ -320,7 +319,7 @@ func (d *OracleDatabase) LoadTemporaryMessage(chatID int64, messageID int) (resu
 }
 
 // DeleteTemporaryMessage deletes given temporary message
-func (d *OracleDatabase) DeleteTemporaryMessage(chatID int64, messageID int) (result bool, err error) {
+func (d *OracleDatabase) DeleteTemporaryMessage(chatID int64, messageID int64) (result bool, err error) {
 	var tx *sql.Tx
 	if tx, err = d.db.Begin(); err == nil {
 		var stmt *sql.Stmt
@@ -346,7 +345,7 @@ func (d *OracleDatabase) DeleteTemporaryMessage(chatID int64, messageID int) (re
 }
 
 // Enqueue enques given message
-func (d *OracleDatabase) Enqueue(chatID int64, messageID int, message, fileID string, fileType FileType, fireOn time.Time) (result bool, err error) {
+func (d *OracleDatabase) Enqueue(chatID int64, messageID int64, message, fileID string, fileType FileType, fireOn time.Time) (result bool, err error) {
 	var tx *sql.Tx
 	if tx, err = d.db.Begin(); err == nil {
 		var stmt *sql.Stmt
@@ -402,8 +401,7 @@ func (d *OracleDatabase) DeliverableQueueItems(maxNumTries int) (queue []QueueIt
 			} else {
 				defer rows.Close()
 
-				var id, chatID int64
-				var messageID int
+				var id, chatID, messageID int64
 				var message, fileID string
 				var fileType FileType
 				var enqueuedOn, fireOn, deliveredOn time.Time
@@ -461,8 +459,7 @@ func (d *OracleDatabase) UndeliveredQueueItems(chatID int64) (queue []QueueItem,
 			} else {
 				defer rows.Close()
 
-				var id, chatID int64
-				var messageID int
+				var id, chatID, messageID int64
 				var message, fileID string
 				var fileType FileType
 				var enqueuedOn, fireOn, deliveredOn time.Time
@@ -519,8 +516,7 @@ func (d *OracleDatabase) GetQueueItem(chatID, queueID int64) (queueItem QueueIte
 			} else {
 				defer rows.Close()
 
-				var id, chatID int64
-				var messageID int
+				var id, chatID, messageID int64
 				var message, fileID string
 				var fileType FileType
 				var enqueuedOn, fireOn, deliveredOn time.Time

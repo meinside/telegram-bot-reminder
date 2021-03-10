@@ -111,10 +111,10 @@ type DatabaseInterface interface {
 	Log(msg string)
 	LogError(msg string)
 	GetLogs(latestN int) ([]database.Log, error)
-	SaveTemporaryMessage(chatID int64, messageID int, message, fileID string, fileType database.FileType) (bool, error)
-	LoadTemporaryMessage(chatID int64, messageID int) (database.TemporaryMessage, error)
-	DeleteTemporaryMessage(chatID int64, messageID int) (bool, error)
-	Enqueue(chatID int64, messageID int, message, fileID string, fileType database.FileType, fireOn time.Time) (bool, error)
+	SaveTemporaryMessage(chatID, messageID int64, message, fileID string, fileType database.FileType) (bool, error)
+	LoadTemporaryMessage(chatID, messageID int64) (database.TemporaryMessage, error)
+	DeleteTemporaryMessage(chatID, messageID int64) (bool, error)
+	Enqueue(chatID, messageID int64, message, fileID string, fileType database.FileType, fireOn time.Time) (bool, error)
 	DeliverableQueueItems(maxNumTries int) ([]database.QueueItem, error)
 	UndeliveredQueueItems(chatID int64) ([]database.QueueItem, error)
 	GetQueueItem(chatID, queueID int64) (database.QueueItem, error)
@@ -439,7 +439,7 @@ func processCallbackQuery(b *bot.Bot, update bot.Update) bool {
 
 		if len(params) >= 3 {
 			if chatID, err := strconv.ParseInt(params[0], 10, 64); err == nil {
-				if messageID, err := strconv.Atoi(params[1]); err == nil {
+				if messageID, err := strconv.ParseInt(params[1], 10, 64); err == nil {
 					if saved, err := db.LoadTemporaryMessage(chatID, messageID); err == nil {
 						if when, err := time.ParseInLocation(defaultDatetimeFormat, params[2], _location); err == nil {
 							if _, err := db.Enqueue(chatID, messageID, saved.Message, saved.FileID, saved.FileType, when); err == nil {
@@ -850,7 +850,7 @@ func sortTimes(times []time.Time) {
 }
 
 // generate inline keyboard buttons for multiple datetimes
-func datetimeButtonsForCallbackQuery(times []time.Time, chatID int64, messageID int) [][]bot.InlineKeyboardButton {
+func datetimeButtonsForCallbackQuery(times []time.Time, chatID int64, messageID int64) [][]bot.InlineKeyboardButton {
 	// datetime buttons
 	keys := make(map[string]string)
 	for _, w := range times {
