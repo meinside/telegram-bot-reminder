@@ -896,7 +896,7 @@ func main() {
 			{Command: commandListReminders, Description: descriptionCommandListReminders},
 			{Command: commandCancel, Description: descriptionCommandCancel},
 			{Command: commandHelp, Description: descriptionCommandHelp},
-		}); !setCommands.Ok {
+		}, nil); !setCommands.Ok {
 			_stderr.Printf("failed to set bot commands")
 		}
 
