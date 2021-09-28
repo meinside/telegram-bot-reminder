@@ -38,7 +38,6 @@ const (
 	messageCommandCanceled        = "명령이 취소 되었습니다."
 	messageReminderCanceledFormat = "알림이 취소 되었습니다: %s"
 	messageError                  = "오류가 발생했습니다."
-	messageErrorFormat            = "오류가 발생했습니다: %s"
 	messageNoReminders            = "예약된 알림이 없습니다."
 	messageNoDateTime             = "유효한 날짜 또는 시간이 없습니다: %s"
 	messageListItemFormat         = "☑ %s; %s"
@@ -204,7 +203,7 @@ func init() {
 
 // check if given Telegram id is allowed or not
 func isAllowedID(id string) bool {
-	if _restrictUsers == false {
+	if !_restrictUsers {
 		return true
 	}
 
@@ -218,11 +217,8 @@ func isAllowedID(id string) bool {
 }
 
 func monitorQueue(monitor *time.Ticker, client *bot.Bot) {
-	for {
-		select {
-		case <-monitor.C:
-			processQueue(client)
-		}
+	for range monitor.C {
+		processQueue(client)
 	}
 }
 
@@ -234,7 +230,7 @@ func processQueue(client *bot.Bot) {
 
 		for _, q := range queue {
 			go func(q database.QueueItem) {
-				message := fmt.Sprintf("%s", q.Message)
+				message := q.Message
 
 				options := defaultOptions()
 				options["reply_to_message_id"] = q.MessageID // show original message
@@ -741,10 +737,10 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 
 func parseMessage(message string) (candidates []time.Time, what string, err error) {
 	now := time.Now()
-	what = fmt.Sprintf("%s", message) // XXX - edit this?
+	what = message // XXX - edit this?
 
-	dates := map[string]time.Time{}
-	times := map[string]lkdp.Hms{}
+	var dates map[string]time.Time
+	var times map[string]lkdp.Hms
 	if dates, err = lkdp.ExtractDates(message, true); err == nil {
 		if times, err = lkdp.ExtractTimes(message, false); err != nil {
 			times = map[string]lkdp.Hms{

@@ -78,24 +78,23 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 
 				var cnt int
 				for rows.Next() {
-					rows.Scan(&cnt)
-
-					// tables don't exist yet
-					if cnt != 3 {
-						// create table: `PREFIX_logs`
-						if _, err := db.Exec(fmt.Sprintf(`create table %slogs(
+					if err := rows.Scan(&cnt); err == nil {
+						// tables don't exist yet
+						if cnt != 3 {
+							// create table: `PREFIX_logs`
+							if _, err := db.Exec(fmt.Sprintf(`create table %slogs(
 							id NUMBER GENERATED ALWAYS AS IDENTITY,
 							type NVARCHAR2(16) default null,
 							message NVARCHAR2(256) not null,
 							time DATE default sysdate not null
 						)`, tablePrefix)); err != nil {
-							log.Printf("* failed to create table `%slogs`: %s", tablePrefix, err)
-						} else {
-							log.Printf("created table: '%slogs'", tablePrefix)
-						}
+								log.Printf("* failed to create table `%slogs`: %s", tablePrefix, err)
+							} else {
+								log.Printf("created table: '%slogs'", tablePrefix)
+							}
 
-						// create table: `PREFIX_temp_messages`
-						if _, err := db.Exec(fmt.Sprintf(`create table %stemp_messages(
+							// create table: `PREFIX_temp_messages`
+							if _, err := db.Exec(fmt.Sprintf(`create table %stemp_messages(
 							id NUMBER GENERATED ALWAYS AS IDENTITY,
 							chat_id NUMBER not null,
 							message_id NUMBER not null,
@@ -104,18 +103,18 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 							file_type NVARCHAR2(32) default '',
 							saved_on DATE default sysdate not null
 						)`, tablePrefix)); err != nil {
-							log.Printf("* failed to create table `%stemp_messages`: %s", tablePrefix, err)
-						} else {
-							log.Printf("created table: '%stemp_messages'", tablePrefix)
-						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_%stemp_messages1 on %stemp_messages(
+								log.Printf("* failed to create table `%stemp_messages`: %s", tablePrefix, err)
+							} else {
+								log.Printf("created table: '%stemp_messages'", tablePrefix)
+							}
+							if _, err := db.Exec(fmt.Sprintf(`create index idx_%stemp_messages1 on %stemp_messages(
 							chat_id, message_id
 						)`, tablePrefix, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_%stemp_messages1`: %s", tablePrefix, err)
-						}
+								log.Printf("* failed to create index `idx_%stemp_messages1`: %s", tablePrefix, err)
+							}
 
-						// create table: `PREFIX_queue`
-						if _, err := db.Exec(fmt.Sprintf(`create table %squeue(
+							// create table: `PREFIX_queue`
+							if _, err := db.Exec(fmt.Sprintf(`create table %squeue(
 							id NUMBER GENERATED ALWAYS AS IDENTITY,
 							chat_id NUMBER not null,
 							message_id NUMBER not null,
@@ -127,35 +126,38 @@ func OpenOracleDB(id, passwd, sid string) (*OracleDatabase, error) {
 							delivered_on DATE default null,
 							num_tries NUMBER default 0
 						)`, tablePrefix)); err != nil {
-							log.Printf("* failed to create table `%squeue`: %s", tablePrefix, err)
-						} else {
-							log.Printf("created table: '%squeue'", tablePrefix)
-						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue1 on %squeue(
+								log.Printf("* failed to create table `%squeue`: %s", tablePrefix, err)
+							} else {
+								log.Printf("created table: '%squeue'", tablePrefix)
+							}
+							if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue1 on %squeue(
 							chat_id, delivered_on
 						)`, tablePrefix, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_%squeue1`: %s", tablePrefix, err)
-						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue2 on %squeue(
+								log.Printf("* failed to create index `idx_%squeue1`: %s", tablePrefix, err)
+							}
+							if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue2 on %squeue(
 							enqueued_on, delivered_on
 						)`, tablePrefix, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_%squeue2`: %s", tablePrefix, err)
-						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue3 on %squeue(
+								log.Printf("* failed to create index `idx_%squeue2`: %s", tablePrefix, err)
+							}
+							if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue3 on %squeue(
 							enqueued_on, delivered_on, num_tries
 						)`, tablePrefix, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_%squeue3`: %s", tablePrefix, err)
-						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue4 on %squeue(
+								log.Printf("* failed to create index `idx_%squeue3`: %s", tablePrefix, err)
+							}
+							if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue4 on %squeue(
 							chat_id, delivered_on, enqueued_on
 						)`, tablePrefix, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_%squeue4`: %s", tablePrefix, err)
-						}
-						if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue5 on %squeue(
+								log.Printf("* failed to create index `idx_%squeue4`: %s", tablePrefix, err)
+							}
+							if _, err := db.Exec(fmt.Sprintf(`create index idx_%squeue5 on %squeue(
 							enqueued_on, delivered_on, num_tries, fire_on
 						)`, tablePrefix, tablePrefix)); err != nil {
-							log.Printf("* failed to create index `idx_%squeue5`: %s", tablePrefix, err)
+								log.Printf("* failed to create index `idx_%squeue5`: %s", tablePrefix, err)
+							}
 						}
+					} else {
+						log.Printf("* failed to scan row: %s", err)
 					}
 				}
 			}
@@ -179,7 +181,9 @@ func (d *OracleDatabase) saveLog(typ, msg string) (err error) {
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("* failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
@@ -219,18 +223,22 @@ func (d *OracleDatabase) GetLogs(latestN int) (logs []Log, err error) {
 				var typ, msg string
 				var tm time.Time
 				for rows.Next() {
-					rows.Scan(&typ, &msg, &tm)
-
-					logs = append(logs, Log{
-						Type:    typ,
-						Message: msg,
-						Time:    tm,
-					})
+					if err := rows.Scan(&typ, &msg, &tm); err == nil {
+						logs = append(logs, Log{
+							Type:    typ,
+							Message: msg,
+							Time:    tm,
+						})
+					} else {
+						log.Printf("* failed to scan row: %s", err)
+					}
 				}
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("* failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
@@ -255,7 +263,9 @@ func (d *OracleDatabase) SaveTemporaryMessage(chatID int64, messageID int64, mes
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("* failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
@@ -293,16 +303,18 @@ func (d *OracleDatabase) LoadTemporaryMessage(chatID int64, messageID int64) (re
 				var fileType FileType
 				var savedOn time.Time
 				if rows.Next() {
-					rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &savedOn)
-
-					result = TemporaryMessage{
-						ID:        id,
-						ChatID:    chatID,
-						MessageID: messageID,
-						Message:   message,
-						FileID:    fileID,
-						FileType:  fileType,
-						SavedOn:   savedOn,
+					if err = rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &savedOn); err == nil {
+						result = TemporaryMessage{
+							ID:        id,
+							ChatID:    chatID,
+							MessageID: messageID,
+							Message:   message,
+							FileID:    fileID,
+							FileType:  fileType,
+							SavedOn:   savedOn,
+						}
+					} else {
+						log.Printf("* failed to scan row: %s", err)
 					}
 				} else {
 					err = fmt.Errorf("no temporary message for chat id = %d, message id = %d", chatID, messageID)
@@ -310,7 +322,9 @@ func (d *OracleDatabase) LoadTemporaryMessage(chatID int64, messageID int64) (re
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("* failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
@@ -335,7 +349,9 @@ func (d *OracleDatabase) DeleteTemporaryMessage(chatID int64, messageID int64) (
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("* failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 
@@ -361,7 +377,9 @@ func (d *OracleDatabase) Enqueue(chatID int64, messageID int64, message, fileID 
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
@@ -406,24 +424,28 @@ func (d *OracleDatabase) DeliverableQueueItems(maxNumTries int) (queue []QueueIt
 				var fileType FileType
 				var enqueuedOn, fireOn, deliveredOn time.Time
 				for rows.Next() {
-					rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
-
-					queue = append(queue, QueueItem{
-						ID:          id,
-						ChatID:      chatID,
-						MessageID:   messageID,
-						Message:     message,
-						FileID:      fileID,
-						FileType:    fileType,
-						EnqueuedOn:  enqueuedOn,
-						FireOn:      fireOn,
-						DeliveredOn: deliveredOn,
-					})
+					if err = rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn); err == nil {
+						queue = append(queue, QueueItem{
+							ID:          id,
+							ChatID:      chatID,
+							MessageID:   messageID,
+							Message:     message,
+							FileID:      fileID,
+							FileType:    fileType,
+							EnqueuedOn:  enqueuedOn,
+							FireOn:      fireOn,
+							DeliveredOn: deliveredOn,
+						})
+					} else {
+						log.Printf("* failed to scan row: %s", err)
+					}
 				}
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
@@ -464,24 +486,28 @@ func (d *OracleDatabase) UndeliveredQueueItems(chatID int64) (queue []QueueItem,
 				var fileType FileType
 				var enqueuedOn, fireOn, deliveredOn time.Time
 				for rows.Next() {
-					rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
-
-					queue = append(queue, QueueItem{
-						ID:          id,
-						ChatID:      chatID,
-						MessageID:   messageID,
-						Message:     message,
-						FileID:      fileID,
-						FileType:    fileType,
-						EnqueuedOn:  enqueuedOn,
-						FireOn:      fireOn,
-						DeliveredOn: deliveredOn,
-					})
+					if err = rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn); err == nil {
+						queue = append(queue, QueueItem{
+							ID:          id,
+							ChatID:      chatID,
+							MessageID:   messageID,
+							Message:     message,
+							FileID:      fileID,
+							FileType:    fileType,
+							EnqueuedOn:  enqueuedOn,
+							FireOn:      fireOn,
+							DeliveredOn: deliveredOn,
+						})
+					} else {
+						log.Printf("* failed to scan row: %s", err)
+					}
 				}
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
@@ -521,19 +547,21 @@ func (d *OracleDatabase) GetQueueItem(chatID, queueID int64) (queueItem QueueIte
 				var fileType FileType
 				var enqueuedOn, fireOn, deliveredOn time.Time
 				if rows.Next() {
-					rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
-
-					return QueueItem{
-						ID:          id,
-						ChatID:      chatID,
-						MessageID:   messageID,
-						Message:     message,
-						FileID:      fileID,
-						FileType:    fileType,
-						EnqueuedOn:  enqueuedOn,
-						FireOn:      fireOn,
-						DeliveredOn: deliveredOn,
-					}, nil
+					if err = rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn); err == nil {
+						return QueueItem{
+							ID:          id,
+							ChatID:      chatID,
+							MessageID:   messageID,
+							Message:     message,
+							FileID:      fileID,
+							FileType:    fileType,
+							EnqueuedOn:  enqueuedOn,
+							FireOn:      fireOn,
+							DeliveredOn: deliveredOn,
+						}, nil
+					} else {
+						log.Printf("* failed to scan row: %s", err)
+					}
 				}
 
 				err = fmt.Errorf("no such queue item with id = %d, chat_id = %d", id, chatID)
@@ -542,7 +570,9 @@ func (d *OracleDatabase) GetQueueItem(chatID, queueID int64) (queueItem QueueIte
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
@@ -567,10 +597,11 @@ func (d *OracleDatabase) DeleteQueueItem(chatID, queueID int64) (result bool, er
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
-
 	}
 
 	return result, err
@@ -598,7 +629,9 @@ func (d *OracleDatabase) IncreaseNumTries(chatID, queueID int64) (result bool, e
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
@@ -630,7 +663,9 @@ func (d *OracleDatabase) MarkQueueItemAsDelivered(chatID, queueID int64) (result
 			}
 		}
 
-		defer tx.Commit()
+		if err = tx.Commit(); err != nil {
+			log.Printf("failed to commit transaction: %s", err)
+		}
 	} else {
 		log.Printf("failed to begin transaction: %s", err)
 	}
