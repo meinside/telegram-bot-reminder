@@ -166,13 +166,15 @@ func (d *SQLiteDatabase) GetLogs(latestN int) (logs []Log, err error) {
 			var typ, msg string
 			var tm int64
 			for rows.Next() {
-				rows.Scan(&typ, &msg, &tm)
-
-				logs = append(logs, Log{
-					Type:    typ,
-					Message: msg,
-					Time:    time.Unix(tm, 0),
-				})
+				if err = rows.Scan(&typ, &msg, &tm); err == nil {
+					logs = append(logs, Log{
+						Type:    typ,
+						Message: msg,
+						Time:    time.Unix(tm, 0),
+					})
+				} else {
+					log.Printf("* failed to scan row: %s", err)
+				}
 			}
 		}
 	}
@@ -232,16 +234,18 @@ func (d *SQLiteDatabase) LoadTemporaryMessage(chatID int64, messageID int64) (re
 			var fileType FileType
 			var savedOn int64
 			if rows.Next() {
-				rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &savedOn)
-
-				result = TemporaryMessage{
-					ID:        id,
-					ChatID:    chatID,
-					MessageID: messageID,
-					Message:   message,
-					FileID:    fileID,
-					FileType:  fileType,
-					SavedOn:   time.Unix(savedOn, 0),
+				if err = rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &savedOn); err == nil {
+					result = TemporaryMessage{
+						ID:        id,
+						ChatID:    chatID,
+						MessageID: messageID,
+						Message:   message,
+						FileID:    fileID,
+						FileType:  fileType,
+						SavedOn:   time.Unix(savedOn, 0),
+					}
+				} else {
+					log.Printf("* failed to scan row: %s", err)
 				}
 			} else {
 				err = fmt.Errorf("no temporary message for chat id = %d, message id = %d", chatID, messageID)
@@ -332,19 +336,21 @@ func (d *SQLiteDatabase) DeliverableQueueItems(maxNumTries int) (queue []QueueIt
 			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
 			for rows.Next() {
-				rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
-
-				queue = append(queue, QueueItem{
-					ID:          id,
-					ChatID:      chatID,
-					MessageID:   messageID,
-					Message:     message,
-					FileID:      fileID,
-					FileType:    fileType,
-					EnqueuedOn:  time.Unix(enqueuedOn, 0),
-					FireOn:      time.Unix(fireOn, 0),
-					DeliveredOn: time.Unix(deliveredOn, 0),
-				})
+				if err = rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn); err == nil {
+					queue = append(queue, QueueItem{
+						ID:          id,
+						ChatID:      chatID,
+						MessageID:   messageID,
+						Message:     message,
+						FileID:      fileID,
+						FileType:    fileType,
+						EnqueuedOn:  time.Unix(enqueuedOn, 0),
+						FireOn:      time.Unix(fireOn, 0),
+						DeliveredOn: time.Unix(deliveredOn, 0),
+					})
+				} else {
+					log.Printf("* failed to scan row: %s", err)
+				}
 			}
 		}
 	}
@@ -386,19 +392,21 @@ func (d *SQLiteDatabase) UndeliveredQueueItems(chatID int64) (queue []QueueItem,
 			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
 			for rows.Next() {
-				rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
-
-				queue = append(queue, QueueItem{
-					ID:          id,
-					ChatID:      chatID,
-					MessageID:   messageID,
-					Message:     message,
-					FileID:      fileID,
-					FileType:    fileType,
-					EnqueuedOn:  time.Unix(enqueuedOn, 0),
-					FireOn:      time.Unix(fireOn, 0),
-					DeliveredOn: time.Unix(deliveredOn, 0),
-				})
+				if err = rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn); err == nil {
+					queue = append(queue, QueueItem{
+						ID:          id,
+						ChatID:      chatID,
+						MessageID:   messageID,
+						Message:     message,
+						FileID:      fileID,
+						FileType:    fileType,
+						EnqueuedOn:  time.Unix(enqueuedOn, 0),
+						FireOn:      time.Unix(fireOn, 0),
+						DeliveredOn: time.Unix(deliveredOn, 0),
+					})
+				} else {
+					log.Printf("* failed to scan row: %s", err)
+				}
 			}
 		}
 	}
@@ -439,19 +447,21 @@ func (d *SQLiteDatabase) GetQueueItem(chatID, queueID int64) (queueItem QueueIte
 			var fileType FileType
 			var enqueuedOn, fireOn, deliveredOn int64
 			if rows.Next() {
-				rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn)
-
-				return QueueItem{
-					ID:          id,
-					ChatID:      chatID,
-					MessageID:   messageID,
-					Message:     message,
-					FileID:      fileID,
-					FileType:    fileType,
-					EnqueuedOn:  time.Unix(enqueuedOn, 0),
-					FireOn:      time.Unix(fireOn, 0),
-					DeliveredOn: time.Unix(deliveredOn, 0),
-				}, nil
+				if err = rows.Scan(&id, &chatID, &messageID, &message, &fileID, &fileType, &enqueuedOn, &fireOn, &deliveredOn); err == nil {
+					return QueueItem{
+						ID:          id,
+						ChatID:      chatID,
+						MessageID:   messageID,
+						Message:     message,
+						FileID:      fileID,
+						FileType:    fileType,
+						EnqueuedOn:  time.Unix(enqueuedOn, 0),
+						FireOn:      time.Unix(fireOn, 0),
+						DeliveredOn: time.Unix(deliveredOn, 0),
+					}, nil
+				} else {
+					log.Printf("* failed to scan row: %s", err)
+				}
 			}
 
 			log.Printf("* failed to select a queue item with id = %d, chat_id = %d from local database", id, chatID)
