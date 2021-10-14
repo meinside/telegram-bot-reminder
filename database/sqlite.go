@@ -429,7 +429,7 @@ func (d *SQLiteDatabase) GetQueueItem(chatID, queueID int64) (queueItem QueueIte
 		file_type,
 		enqueued_on,
 		fire_on,
-		delivered_on
+		ifnull(delivered_on, 0) as delivered_on
 		from queue
 		where id = ? and chat_id = ?`); err != nil {
 		log.Printf("* failed to prepare a statement: %s", err)
