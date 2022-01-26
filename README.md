@@ -12,6 +12,10 @@ caption을 추가하지 않으면 즉시 메시지를 돌려보냄.
 
 메시지 내용에 날짜/시간이 여러번 등장할 경우에는 그 중에서 선택하도록 해줌.
 
+## 지원 Database
+
+- [x] SQLite
+
 ## install
 
 ```bash
@@ -29,26 +33,6 @@ $ vi config.json
 ```
 
 **telegram_api_token** 값을 본인의 telegram bot api token으로 교체하여 사용할 것.
-
-### Oracle database 사용 시
-
-config.json에 다음의 Oracle database 설정을 추가:
-
-```json
-  ...
-
-  "oracle_db_config": {
-    "username": "oracle_username",
-    "password": "oracle_password1234",
-    "sid": "oracle_sid"
-  },
-
-  ...
-```
-
-### 기타
-
-별도의 설정이 따로 없을 시 SQLite database를 사용.
 
 ## run
 
