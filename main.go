@@ -85,21 +85,14 @@ var _allowedUserIds []string
 
 var _isVerbose bool
 
-type oracleDatabaseConfig struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	SID      string `json:"sid"`
-}
-
 type config struct {
-	TelegramAPIToken        string                `json:"telegram_api_token"`
-	MonitorIntervalSeconds  int                   `json:"monitor_interval_seconds"`
-	TelegramIntervalSeconds int                   `json:"telegram_interval_seconds"`
-	MaxNumTries             int                   `json:"max_num_tries"`
-	RestrictUsers           bool                  `json:"restrict_users,omitempty"`
-	AllowedUserIds          []string              `json:"allowed_user_ids"`
-	OracleDatabaseConfig    *oracleDatabaseConfig `json:"oracle_db_config,omitempty"`
-	IsVerbose               bool                  `json:"is_verbose,omitempty"`
+	TelegramAPIToken        string   `json:"telegram_api_token"`
+	MonitorIntervalSeconds  int      `json:"monitor_interval_seconds"`
+	TelegramIntervalSeconds int      `json:"telegram_interval_seconds"`
+	MaxNumTries             int      `json:"max_num_tries"`
+	RestrictUsers           bool     `json:"restrict_users,omitempty"`
+	AllowedUserIds          []string `json:"allowed_user_ids"`
+	IsVerbose               bool     `json:"is_verbose,omitempty"`
 }
 
 var _stdout = log.New(os.Stdout, "", log.LstdFlags)
@@ -110,10 +103,10 @@ type DatabaseInterface interface {
 	Log(msg string)
 	LogError(msg string)
 	GetLogs(latestN int) ([]database.Log, error)
-	SaveTemporaryMessage(chatID, messageID int64, message, fileID string, fileType database.FileType) (bool, error)
+	SaveTemporaryMessage(chatID, messageID int64, message string, fileID *string, fileType *database.FileType) (bool, error)
 	LoadTemporaryMessage(chatID, messageID int64) (database.TemporaryMessage, error)
 	DeleteTemporaryMessage(chatID, messageID int64) (bool, error)
-	Enqueue(chatID, messageID int64, message, fileID string, fileType database.FileType, fireOn time.Time) (bool, error)
+	Enqueue(chatID, messageID int64, message string, fileID *string, fileType *database.FileType, fireOn time.Time) (bool, error)
 	DeliverableQueueItems(maxNumTries int) ([]database.QueueItem, error)
 	UndeliveredQueueItems(chatID int64) ([]database.QueueItem, error)
 	GetQueueItem(chatID, queueID int64) (database.QueueItem, error)
@@ -184,16 +177,8 @@ func init() {
 		}
 
 		var err error
-		if _conf.OracleDatabaseConfig != nil {
-			// open oracle database connection,
-			if db, err = database.OpenOracleDB(_conf.OracleDatabaseConfig.Username, _conf.OracleDatabaseConfig.Password, _conf.OracleDatabaseConfig.SID); err != nil {
-				panic(err)
-			}
-		} else {
-			// fallback - load sqlite db,
-			if db, err = database.OpenSQLiteDB(dbFilepath); err != nil {
-				panic(err)
-			}
+		if db, err = database.OpenSQLiteDB(dbFilepath); err != nil {
+			panic(err)
 		}
 
 		_location, _ = time.LoadLocation("Local")
@@ -238,24 +223,24 @@ func processQueue(client *bot.Bot) {
 				var sent bot.APIResponseMessage
 
 				// if it is a message with a file,
-				if q.FileID != "" && q.FileType != "" {
-					switch q.FileType {
+				if q.FileID != nil && *q.FileType != "" {
+					switch *q.FileType {
 					case database.FileTypeDocument:
 						options["caption"] = message
-						sent = client.SendDocument(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+						sent = client.SendDocument(q.ChatID, bot.InputFileFromFileID(*q.FileID), options)
 					case database.FileTypeAudio:
 						options["caption"] = message
-						sent = client.SendAudio(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+						sent = client.SendAudio(q.ChatID, bot.InputFileFromFileID(*q.FileID), options)
 					case database.FileTypePhoto:
 						options["caption"] = message
-						sent = client.SendPhoto(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+						sent = client.SendPhoto(q.ChatID, bot.InputFileFromFileID(*q.FileID), options)
 					case database.FileTypeSticker:
-						sent = client.SendSticker(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+						sent = client.SendSticker(q.ChatID, bot.InputFileFromFileID(*q.FileID), options)
 					case database.FileTypeVideo:
 						options["caption"] = message
-						sent = client.SendVideo(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+						sent = client.SendVideo(q.ChatID, bot.InputFileFromFileID(*q.FileID), options)
 					case database.FileTypeVoice:
-						sent = client.SendVoice(q.ChatID, bot.InputFileFromFileID(q.FileID), options)
+						sent = client.SendVoice(q.ChatID, bot.InputFileFromFileID(*q.FileID), options)
 					}
 				} else {
 					// if it is just a message,
@@ -357,7 +342,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						if len(whens) == 1 {
 							when := whens[0]
 
-							if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, "", "", when); err == nil {
+							if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, nil, nil, when); err == nil {
 								message = fmt.Sprintf(messageResponseFormat,
 									when.In(_location).Format(defaultDatetimeFormat),
 									txt,
@@ -366,7 +351,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 								message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 							}
 						} else {
-							if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, "", ""); err == nil {
+							if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, nil, nil); err == nil {
 								message = messageSelectWhat
 
 								// options for inline keyboards
@@ -508,11 +493,13 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			txt := *update.Message.Caption
 
 			if whens, _, err := parseMessage(txt); err == nil {
+				typ := database.FileTypeDocument
+
 				if len(whens) == 1 {
 					when := whens[0]
 
 					// enqueue received file
-					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeDocument, when); err == nil {
+					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, &fileID, &typ, when); err == nil {
 						message = fmt.Sprintf(messageWillSendBackFileFormat,
 							username,
 							"file",
@@ -524,7 +511,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 						message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 					}
 				} else {
-					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, fileID, database.FileTypeDocument); err == nil {
+					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, &fileID, &typ); err == nil {
 						message = messageSelectWhat
 
 						// options for inline keyboards
@@ -560,11 +547,13 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			txt := *update.Message.Caption
 
 			if whens, _, err := parseMessage(txt); err == nil {
+				typ := database.FileTypeAudio
+
 				if len(whens) == 1 {
 					when := whens[0]
 
 					// enqueue received file
-					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeAudio, when); err == nil {
+					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, &fileID, &typ, when); err == nil {
 						message = fmt.Sprintf(messageWillSendBackFileFormat,
 							username,
 							"audio",
@@ -576,7 +565,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 						message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 					}
 				} else {
-					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, fileID, database.FileTypeAudio); err == nil {
+					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, &fileID, &typ); err == nil {
 						message = messageSelectWhat
 
 						// options for inline keyboards
@@ -613,11 +602,13 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			txt := *update.Message.Caption
 
 			if whens, _, err := parseMessage(txt); err == nil {
+				typ := database.FileTypePhoto
+
 				if len(whens) == 1 {
 					when := whens[0]
 
 					// enqueue received file
-					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypePhoto, when); err == nil {
+					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, &fileID, &typ, when); err == nil {
 						message = fmt.Sprintf(messageWillSendBackFileFormat,
 							username,
 							"image",
@@ -629,7 +620,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 						message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 					}
 				} else {
-					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, fileID, database.FileTypePhoto); err == nil {
+					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, &fileID, &typ); err == nil {
 						message = messageSelectWhat
 
 						// options for inline keyboards
@@ -675,11 +666,13 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 			txt := *update.Message.Caption
 
 			if whens, _, err := parseMessage(txt); err == nil {
+				typ := database.FileTypeVideo
+
 				if len(whens) == 1 {
 					when := whens[0]
 
 					// enqueue received file
-					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, fileID, database.FileTypeVideo, when); err == nil {
+					if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, &fileID, &typ, when); err == nil {
 						message = fmt.Sprintf(messageWillSendBackFileFormat,
 							username,
 							"image",
@@ -691,7 +684,7 @@ func processOthers(b *bot.Bot, update bot.Update) bool {
 						message = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 					}
 				} else {
-					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, fileID, database.FileTypeVideo); err == nil {
+					if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, &fileID, &typ); err == nil {
 						message = messageSelectWhat
 
 						// options for inline keyboards
