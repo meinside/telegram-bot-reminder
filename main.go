@@ -15,6 +15,7 @@ import (
 	lkdp "github.com/meinside/lazy-korean-date-parser-go"
 	bot "github.com/meinside/telegram-bot-go"
 	"github.com/meinside/telegram-bot-reminder/database"
+	"github.com/meinside/version-go"
 )
 
 const (
@@ -49,7 +50,7 @@ const (
 	messageTimeIsPast             = "이미 지난 시각입니다."
 	messageSendingBackFile        = "받은 파일을 즉시 다시 보내드립니다."
 	messageWillSendBackFileFormat = "@%s님에게 받은 파일(%s)을 %s에 보내드리겠습니다."
-	messageUsage                  = `사용법:
+	messageUsageFormat            = `사용법:
 
 * 기본 사용 방법:
 날짜 또는 시간이 포함된 메시지, 또는 caption이 포함된 파일을 보내면
@@ -67,6 +68,8 @@ const (
 /list : 예약된 알림 조회
 /cancel : 예약된 알림 취소
 /help : 본 사용법 확인
+
+* 버전: %[1]s
 
 * 문의:
 https://github.com/meinside/telegram-bot-reminder
@@ -220,7 +223,7 @@ func processQueue(client *bot.Bot) {
 				options := defaultOptions()
 				options["reply_to_message_id"] = q.MessageID // show original message
 
-				var sent bot.APIResponseMessage
+				var sent bot.APIResponse[bot.Message]
 
 				// if it is a message with a file,
 				if q.FileID != nil && *q.FileType != "" {
@@ -281,7 +284,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 			chatID := update.Message.Chat.ID
 
 			// 'is typing...'
-			b.SendChatAction(chatID, bot.ChatActionTyping)
+			b.SendChatAction(chatID, bot.ChatActionTyping, bot.OptionsSendChatAction{})
 
 			message := ""
 			options := defaultOptions()
@@ -290,7 +293,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 				txt := *update.Message.Text
 
 				if strings.HasPrefix(txt, commandStart) { // /start
-					message = messageUsage
+					message = usageMessage()
 				} else if strings.HasPrefix(txt, commandListReminders) {
 					if reminders, err := db.UndeliveredQueueItems(chatID); err == nil {
 						if len(reminders) > 0 {
@@ -336,7 +339,7 @@ func processUpdate(b *bot.Bot, update bot.Update, err error) {
 						_stderr.Printf("failed to process %s: %s", commandCancel, err)
 					}
 				} else if strings.HasPrefix(txt, commandHelp) {
-					message = messageUsage
+					message = usageMessage()
 				} else {
 					if whens, _, err := parseMessage(txt); err == nil {
 						if len(whens) == 1 {
@@ -869,6 +872,11 @@ func defaultOptions() map[string]interface{} {
 			ResizeKeyboard: true,
 		},
 	}
+}
+
+// generate usage message string
+func usageMessage() string {
+	return fmt.Sprintf(messageUsageFormat, version.Minimum())
 }
 
 func main() {
