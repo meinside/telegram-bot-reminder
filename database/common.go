@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -27,7 +28,6 @@ type Log struct {
 
 	Type    string
 	Message string
-	Time    time.Time
 }
 
 // QueueItem is a struct for queue items
@@ -93,21 +93,24 @@ func (d *Database) saveLog(typ, msg string) (err error) {
 	res := d.db.Create(&Log{
 		Type:    typ,
 		Message: msg,
-		Time:    time.Now(),
 	})
 
 	return res.Error
 }
 
 // Log logs a message
-func (d *Database) Log(msg string) {
+func (d *Database) Log(format string, v ...any) {
+	msg := fmt.Sprintf(format, v...)
+
 	if err := d.saveLog("log", msg); err != nil {
 		log.Printf("failed to save log message: %s", err)
 	}
 }
 
 // LogError logs an error message
-func (d *Database) LogError(msg string) {
+func (d *Database) LogError(format string, v ...any) {
+	msg := fmt.Sprintf(format, v...)
+
 	if err := d.saveLog("err", msg); err != nil {
 		log.Printf("failed to save error message: %s", err)
 	}
