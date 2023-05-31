@@ -83,13 +83,9 @@ func messageFromUpdate(update bot.Update) *bot.Message {
 }
 
 // check if given update is allowed
-func isAllowed(conf config, update bot.Update, username *string) bool {
+func isAllowed(conf config, update bot.Update) bool {
 	if !conf.RestrictUsers {
 		return true
-	}
-
-	if username == nil {
-		return false
 	}
 
 	message := messageFromUpdate(update)
@@ -97,11 +93,14 @@ func isAllowed(conf config, update bot.Update, username *string) bool {
 		return false
 	}
 
-	if username := update.Message.From.Username; username != nil {
-		for _, v := range conf.AllowedUserIDs {
-			if v == *username {
-				return true
-			}
+	username := message.From.Username
+	if username == nil {
+		return false
+	}
+
+	for _, v := range conf.AllowedUserIDs {
+		if v == *username {
+			return true
 		}
 	}
 
@@ -210,11 +209,10 @@ func processUpdate(b *bot.Bot, conf config, db *database.Database, update bot.Up
 	if err == nil {
 		if update.HasMessage() || update.HasEditedMessage() {
 			message := messageFromUpdate(update)
-			username := message.From.Username
 
-			if !isAllowed(conf, update, username) {
-				if username != nil {
-					logError(db, "id not allowed: %s", *username)
+			if !isAllowed(conf, update) {
+				if message.From.Username != nil {
+					logError(db, "id not allowed: %s", *message.From.Username)
 				}
 
 				return
@@ -285,7 +283,7 @@ func processUpdate(b *bot.Bot, conf config, db *database.Database, update bot.Up
 						if len(whens) == 1 {
 							when := whens[0]
 
-							if _, err := db.Enqueue(chatID, update.Message.MessageID, txt, nil, nil, when); err == nil {
+							if _, err := db.Enqueue(chatID, message.MessageID, txt, nil, nil, when); err == nil {
 								msg = fmt.Sprintf(messageResponseFormat,
 									when.In(_location).Format(defaultDatetimeFormat),
 									txt,
@@ -294,12 +292,12 @@ func processUpdate(b *bot.Bot, conf config, db *database.Database, update bot.Up
 								msg = fmt.Sprintf(messageSaveFailedFormat, txt, err)
 							}
 						} else {
-							if _, err := db.SaveTemporaryMessage(chatID, update.Message.MessageID, txt, nil, nil); err == nil {
+							if _, err := db.SaveTemporaryMessage(chatID, message.MessageID, txt, nil, nil); err == nil {
 								msg = messageSelectWhat
 
 								// options for inline keyboards
 								options.SetReplyMarkup(bot.InlineKeyboardMarkup{
-									InlineKeyboard: datetimeButtonsForCallbackQuery(whens, chatID, update.Message.MessageID),
+									InlineKeyboard: datetimeButtonsForCallbackQuery(whens, chatID, message.MessageID),
 								})
 							} else {
 								msg = messageError
