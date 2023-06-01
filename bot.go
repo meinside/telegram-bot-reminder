@@ -70,27 +70,10 @@ https://github.com/meinside/telegram-bot-reminder
 
 var _location *time.Location
 
-// return usable message value from given update
-func messageFromUpdate(update bot.Update) *bot.Message {
-	if update.HasMessage() {
-		return update.Message
-	}
-	if update.HasEditedMessage() {
-		return update.EditedMessage
-	}
-
-	return nil
-}
-
 // check if given update is allowed
-func isAllowed(conf config, update bot.Update) bool {
+func isAllowed(conf config, message bot.Message) bool {
 	if !conf.RestrictUsers {
 		return true
-	}
-
-	message := messageFromUpdate(update)
-	if message == nil {
-		return false
 	}
 
 	username := message.From.Username
@@ -205,134 +188,123 @@ func processQueue(client *bot.Bot, conf config, db *database.Database) {
 }
 
 // process polled updates
-func processUpdate(b *bot.Bot, conf config, db *database.Database, update bot.Update, err error) {
-	if err == nil {
-		if update.HasMessage() || update.HasEditedMessage() {
-			message := messageFromUpdate(update)
+func processMessage(b *bot.Bot, conf config, db *database.Database, message bot.Message) {
+	if !isAllowed(conf, message) {
+		if message.From.Username != nil {
+			logError(db, "id not allowed: %s", *message.From.Username)
+		}
 
-			if !isAllowed(conf, update) {
-				if message.From.Username != nil {
-					logError(db, "id not allowed: %s", *message.From.Username)
-				}
+		return
+	}
 
-				return
-			}
+	chatID := message.Chat.ID
 
-			chatID := message.Chat.ID
+	// 'is typing...'
+	b.SendChatAction(chatID, bot.ChatActionTyping, bot.OptionsSendChatAction{})
 
-			// 'is typing...'
-			b.SendChatAction(chatID, bot.ChatActionTyping, bot.OptionsSendChatAction{})
+	msg := ""
+	options := bot.OptionsSendMessage{}.
+		SetReplyMarkup(defaultReplyMarkup())
 
-			msg := ""
-			options := bot.OptionsSendMessage{}.
-				SetReplyMarkup(defaultReplyMarkup())
+	if message.HasText() { // text
+		txt := *message.Text
 
-			if message.HasText() { // text
-				txt := *message.Text
-
-				if strings.HasPrefix(txt, commandStart) { // /start
-					msg = usageMessage()
-				} else if strings.HasPrefix(txt, commandListReminders) {
-					if reminders, err := db.UndeliveredQueueItems(chatID); err == nil {
-						if len(reminders) > 0 {
-							format := fmt.Sprintf("%s\n", messageListItemFormat)
-							for _, r := range reminders {
-								msg += fmt.Sprintf(format, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)
-							}
-						} else {
-							msg = messageNoReminders
-						}
-					} else {
-						logError(db, "failed to process %s: %s", commandListReminders, err)
+		if strings.HasPrefix(txt, commandStart) { // /start
+			msg = usageMessage()
+		} else if strings.HasPrefix(txt, commandListReminders) {
+			if reminders, err := db.UndeliveredQueueItems(chatID); err == nil {
+				if len(reminders) > 0 {
+					format := fmt.Sprintf("%s\n", messageListItemFormat)
+					for _, r := range reminders {
+						msg += fmt.Sprintf(format, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)
 					}
-				} else if strings.HasPrefix(txt, commandCancel) {
-					if reminders, err := db.UndeliveredQueueItems(chatID); err == nil {
-						if len(reminders) > 0 {
-							// inline keyboards
-							keys := make(map[string]string)
-							for _, r := range reminders {
-								keys[fmt.Sprintf(messageListItemFormat, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)] = fmt.Sprintf("%s %d", commandCancel, r.ID)
-							}
-							buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
-
-							// add a cancel button for canceling reminder
-							cancel := commandCancel
-							buttons = append(buttons, []bot.InlineKeyboardButton{
-								{
-									Text:         messageCancel,
-									CallbackData: &cancel,
-								},
-							})
-
-							// options
-							options.SetReplyMarkup(bot.InlineKeyboardMarkup{
-								InlineKeyboard: buttons,
-							})
-
-							msg = messageCancelWhat
-						} else {
-							msg = messageNoReminders
-						}
-					} else {
-						logError(db, "failed to process %s: %s", commandCancel, err)
-					}
-				} else if strings.HasPrefix(txt, commandHelp) {
-					msg = usageMessage()
 				} else {
-					if whens, _, err := parseMessage(txt); err == nil {
-						if len(whens) == 1 {
-							when := whens[0]
+					msg = messageNoReminders
+				}
+			} else {
+				logError(db, "failed to process %s: %s", commandListReminders, err)
+			}
+		} else if strings.HasPrefix(txt, commandCancel) {
+			if reminders, err := db.UndeliveredQueueItems(chatID); err == nil {
+				if len(reminders) > 0 {
+					// inline keyboards
+					keys := make(map[string]string)
+					for _, r := range reminders {
+						keys[fmt.Sprintf(messageListItemFormat, r.FireOn.In(_location).Format(defaultDatetimeFormat), r.Message)] = fmt.Sprintf("%s %d", commandCancel, r.ID)
+					}
+					buttons := bot.NewInlineKeyboardButtonsAsRowsWithCallbackData(keys)
 
-							if _, err := db.Enqueue(chatID, message.MessageID, txt, nil, nil, when); err == nil {
-								msg = fmt.Sprintf(messageResponseFormat,
-									when.In(_location).Format(defaultDatetimeFormat),
-									txt,
-								)
-							} else {
-								msg = fmt.Sprintf(messageSaveFailedFormat, txt, err)
-							}
-						} else {
-							if _, err := db.SaveTemporaryMessage(chatID, message.MessageID, txt, nil, nil); err == nil {
-								msg = messageSelectWhat
+					// add a cancel button for canceling reminder
+					cancel := commandCancel
+					buttons = append(buttons, []bot.InlineKeyboardButton{
+						{
+							Text:         messageCancel,
+							CallbackData: &cancel,
+						},
+					})
 
-								// options for inline keyboards
-								options.SetReplyMarkup(bot.InlineKeyboardMarkup{
-									InlineKeyboard: datetimeButtonsForCallbackQuery(whens, chatID, message.MessageID),
-								})
-							} else {
-								msg = messageError
-							}
-						}
+					// options
+					options.SetReplyMarkup(bot.InlineKeyboardMarkup{
+						InlineKeyboard: buttons,
+					})
+
+					msg = messageCancelWhat
+				} else {
+					msg = messageNoReminders
+				}
+			} else {
+				logError(db, "failed to process %s: %s", commandCancel, err)
+			}
+		} else if strings.HasPrefix(txt, commandHelp) {
+			msg = usageMessage()
+		} else {
+			if whens, _, err := parseMessage(txt); err == nil {
+				if len(whens) == 1 {
+					when := whens[0]
+
+					if _, err := db.Enqueue(chatID, message.MessageID, txt, nil, nil, when); err == nil {
+						msg = fmt.Sprintf(messageResponseFormat,
+							when.In(_location).Format(defaultDatetimeFormat),
+							txt,
+						)
 					} else {
-						msg = fmt.Sprintf(messageParseFailedFormat, err)
+						msg = fmt.Sprintf(messageSaveFailedFormat, txt, err)
+					}
+				} else {
+					if _, err := db.SaveTemporaryMessage(chatID, message.MessageID, txt, nil, nil); err == nil {
+						msg = messageSelectWhat
+
+						// options for inline keyboards
+						options.SetReplyMarkup(bot.InlineKeyboardMarkup{
+							InlineKeyboard: datetimeButtonsForCallbackQuery(whens, chatID, message.MessageID),
+						})
+					} else {
+						msg = messageError
 					}
 				}
 			} else {
-				processOthers(b, conf, db, message)
-				return
+				msg = fmt.Sprintf(messageParseFailedFormat, err)
 			}
-
-			// send message
-			if len(msg) <= 0 {
-				msg = messageError
-			}
-			if sent := b.SendMessage(chatID, msg, options); !sent.Ok {
-				logError(db, "failed to send message: %s", *sent.Description)
-			}
-		} else if update.HasCallbackQuery() {
-			processCallbackQuery(b, conf, db, update)
 		}
 	} else {
-		logError(db, "error while receiving update (%s)", err.Error())
+		processOthers(b, conf, db, message)
+		return
+	}
+
+	// send message
+	if len(msg) <= 0 {
+		msg = messageError
+	}
+	if sent := b.SendMessage(chatID, msg, options); !sent.Ok {
+		logError(db, "failed to send message: %s", *sent.Description)
 	}
 }
 
 // process incoming callback query
-func processCallbackQuery(b *bot.Bot, conf config, db *database.Database, update bot.Update) bool {
+func processCallbackQuery(b *bot.Bot, conf config, db *database.Database, query bot.CallbackQuery) bool {
 	// process result
 	result := false
 
-	query := *update.CallbackQuery
 	data := *query.Data
 
 	var message = messageError
@@ -420,7 +392,7 @@ func processCallbackQuery(b *bot.Bot, conf config, db *database.Database, update
 }
 
 // process non-text messages
-func processOthers(b *bot.Bot, conf config, db *database.Database, message *bot.Message) (result bool) {
+func processOthers(b *bot.Bot, conf config, db *database.Database, message bot.Message) (result bool) {
 	result = false
 
 	chatID := message.Chat.ID
@@ -885,9 +857,19 @@ func runBot(conf config, db *database.Database) {
 
 		// delete webhook (getting updates will not work when wehbook is set up)
 		if unhooked := telegram.DeleteWebhook(true); unhooked.Ok {
+			// set update handlers
+			telegram.SetMessageHandler(func(b *bot.Bot, update bot.Update, message bot.Message, edited bool) {
+				processMessage(b, conf, db, message)
+			})
+			telegram.SetCallbackQueryHandler(func(b *bot.Bot, update bot.Update, callbackQuery bot.CallbackQuery) {
+				processCallbackQuery(b, conf, db, callbackQuery)
+			})
+
 			// wait for new updates
 			telegram.StartMonitoringUpdates(0, conf.TelegramIntervalSeconds, func(b *bot.Bot, update bot.Update, err error) {
-				processUpdate(b, conf, db, update, err)
+				if err != nil {
+					logError(db, "error while receiving update (%s)", err.Error())
+				}
 			})
 		} else {
 			logErrorAndDie(db, "failed to delete webhook")

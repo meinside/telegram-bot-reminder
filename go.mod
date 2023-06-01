@@ -1,10 +1,10 @@
 module github.com/meinside/telegram-bot-reminder
 
-go 1.18
+go 1.20
 
 require (
 	github.com/meinside/lazy-korean-date-parser-go v0.2.1
-	github.com/meinside/telegram-bot-go v0.9.2
+	github.com/meinside/telegram-bot-go v0.9.6
 	github.com/meinside/version-go v0.0.2
 	gorm.io/driver/sqlite v1.5.1
 	gorm.io/gorm v1.25.1
