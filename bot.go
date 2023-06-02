@@ -866,7 +866,7 @@ func runBot(conf config, db *database.Database) {
 			})
 
 			// wait for new updates
-			telegram.StartMonitoringUpdates(0, conf.TelegramIntervalSeconds, func(b *bot.Bot, update bot.Update, err error) {
+			telegram.StartPollingUpdates(0, conf.TelegramIntervalSeconds, func(b *bot.Bot, update bot.Update, err error) {
 				if err != nil {
 					logError(db, "error while receiving update (%s)", err.Error())
 				}
