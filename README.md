@@ -1,3 +1,11 @@
+# **(archived)**
+
+[이거](https://github.com/meinside/telegram-reminder-bot)로 갈아탐.
+
+
+
+
+
 # Simple Reminder Bot (Telegram)
 
 간단히 사용 가능한 reminder bot.
